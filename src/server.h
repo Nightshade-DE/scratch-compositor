@@ -28,6 +28,8 @@ struct wlr_layer_surface_v1;
 struct wlr_scene_layer_surface_v1;
 struct wlr_xdg_output_manager_v1;
 struct wlr_screencopy_manager_v1;
+struct wlr_foreign_toplevel_manager_v1;
+struct wlr_foreign_toplevel_handle_v1;
 struct wlr_xdg_decoration_manager_v1;
 struct wlr_xdg_toplevel_decoration_v1;
 
@@ -101,6 +103,9 @@ struct comp_toplevel {
 	struct wl_listener request_resize;
 	struct wl_listener set_title;
 	struct wl_listener set_app_id;
+	struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
+	struct wl_listener foreign_request_activate;
+	struct wl_listener foreign_request_close;
 	struct wlr_xdg_toplevel_decoration_v1 *xdg_decoration;
 	struct wl_listener xdg_decoration_destroy;
 	struct wl_listener xdg_decoration_request_mode;
@@ -126,6 +131,7 @@ struct comp_server {
 	struct wlr_output_layout *output_layout;
 	struct wlr_xdg_output_manager_v1 *xdg_output_manager;
 	struct wlr_screencopy_manager_v1 *screencopy_manager;
+	struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_manager;
 	struct wlr_scene *scene;
 	/** Scene stacking (back to front): background, layout+outputs, bottom, windows, top, overlay. */
 	struct wlr_scene_tree *layer_trees[4];

@@ -31,6 +31,7 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_seat.h>
@@ -58,6 +59,8 @@ static bool server_reload_config(struct comp_server *server);
 static struct comp_toplevel **tile_sorted_views(struct comp_server *server, size_t *n_out);
 static int tile_sorted_index(struct comp_toplevel **arr, size_t n, struct comp_toplevel *v);
 static void toplevel_apply_decoration_mode(struct comp_toplevel *view);
+static void foreign_toplevel_refresh(struct comp_toplevel *view);
+static void foreign_toplevel_sync_all(struct comp_server *server);
 
 /** True after `wlr_backend_start` so shutdown hook runs only for a real session. */
 static bool compositor_session_active;
@@ -90,6 +93,29 @@ static struct comp_output *comp_output_from_wlr(struct comp_server *server, stru
 		}
 	}
 	return NULL;
+}
+
+static void foreign_toplevel_refresh(struct comp_toplevel *view)
+{
+	if (!view || !view->foreign_toplevel) {
+		return;
+	}
+	const char *title = view->xdg_toplevel->title ? view->xdg_toplevel->title : "";
+	const char *app_id = view->xdg_toplevel->app_id ? view->xdg_toplevel->app_id : "";
+	wlr_foreign_toplevel_handle_v1_set_title(view->foreign_toplevel, title);
+	wlr_foreign_toplevel_handle_v1_set_app_id(view->foreign_toplevel, app_id);
+	const bool activated = view->server->focused_toplevel == view &&
+		view->xdg_toplevel->base->surface->mapped &&
+		view->workspace == view->server->current_workspace;
+	wlr_foreign_toplevel_handle_v1_set_activated(view->foreign_toplevel, activated);
+}
+
+static void foreign_toplevel_sync_all(struct comp_server *server)
+{
+	struct comp_toplevel *t;
+	wl_list_for_each(t, &server->toplevels, link) {
+		foreign_toplevel_refresh(t);
+	}
 }
 
 /** Seconds since CLOCK_MONOTONIC epoch (for layout animation delta time). */
@@ -438,6 +464,12 @@ static void output_destroy(struct wl_listener *listener, void *data)
 {
 	(void)data;
 	struct comp_output *output = wl_container_of(listener, output, destroy);
+	struct comp_toplevel *t;
+	wl_list_for_each(t, &output->server->toplevels, link) {
+		if (t->foreign_toplevel) {
+			wlr_foreign_toplevel_handle_v1_output_leave(t->foreign_toplevel, output->wlr_output);
+		}
+	}
 	ext_workspace_on_output_remove(output->server, output->wlr_output);
 	wl_list_remove(&output->frame.link);
 	wl_list_remove(&output->commit.link);
@@ -485,6 +517,12 @@ static void server_new_output(struct wl_listener *listener, void *data)
 	output->destroy.notify = output_destroy;
 	wl_signal_add(&wlr_output->events.destroy, &output->destroy);
 	wl_list_insert(&server->outputs, &output->link);
+	struct comp_toplevel *t;
+	wl_list_for_each(t, &server->toplevels, link) {
+		if (t->foreign_toplevel && t->xdg_toplevel->base->surface->mapped) {
+			wlr_foreign_toplevel_handle_v1_output_enter(t->foreign_toplevel, wlr_output);
+		}
+	}
 	ext_workspace_on_output_new(server, wlr_output);
 	layer_shell_arrange(server);
 }
@@ -596,6 +634,7 @@ static void toplevel_handle_set_title(struct wl_listener *listener, void *data)
 		server_arrange_toplevels(view->server);
 	}
 	server_sync_xdg_decorations(view->server);
+	foreign_toplevel_refresh(view);
 }
 
 static void toplevel_handle_set_app_id(struct wl_listener *listener, void *data)
@@ -608,6 +647,34 @@ static void toplevel_handle_set_app_id(struct wl_listener *listener, void *data)
 		server_arrange_toplevels(view->server);
 	}
 	server_sync_xdg_decorations(view->server);
+	foreign_toplevel_refresh(view);
+}
+
+static void foreign_toplevel_handle_request_activate(struct wl_listener *listener, void *data)
+{
+	struct comp_toplevel *view = wl_container_of(listener, view, foreign_request_activate);
+	struct wlr_foreign_toplevel_handle_v1_activated_event *ev = data;
+	if (!view || !view->xdg_toplevel || !view->xdg_toplevel->base || !view->xdg_toplevel->base->surface->mapped) {
+		return;
+	}
+	if (ev && ev->seat && ev->seat != view->server->seat) {
+		return;
+	}
+	if (view->workspace != view->server->current_workspace) {
+		server_workspace_go(view->server, view->workspace);
+	}
+	focus_toplevel(view->server, view);
+	foreign_toplevel_sync_all(view->server);
+}
+
+static void foreign_toplevel_handle_request_close(struct wl_listener *listener, void *data)
+{
+	(void)data;
+	struct comp_toplevel *view = wl_container_of(listener, view, foreign_request_close);
+	if (!view || !view->xdg_toplevel) {
+		return;
+	}
+	wlr_xdg_toplevel_send_close(view->xdg_toplevel);
 }
 
 static int cmp_toplevel_tile_order(const void *va, const void *vb)
@@ -787,6 +854,7 @@ static void toplevel_unmap(struct wl_listener *listener, void *data)
 	    view->server->grab != COMP_GRAB_MOVE) {
 		server_arrange_toplevels(view->server);
 	}
+	foreign_toplevel_refresh(view);
 }
 
 static void toplevel_destroy(struct wl_listener *listener, void *data)
@@ -806,6 +874,12 @@ static void toplevel_destroy(struct wl_listener *listener, void *data)
 	wl_list_remove(&view->request_resize.link);
 	wl_list_remove(&view->set_title.link);
 	wl_list_remove(&view->set_app_id.link);
+	if (view->foreign_toplevel) {
+		wl_list_remove(&view->foreign_request_activate.link);
+		wl_list_remove(&view->foreign_request_close.link);
+		wlr_foreign_toplevel_handle_v1_destroy(view->foreign_toplevel);
+		view->foreign_toplevel = NULL;
+	}
 	wl_list_remove(&view->link);
 	if (view->server->focused_toplevel == view) {
 		view->server->focused_toplevel = NULL;
@@ -843,6 +917,13 @@ static void toplevel_map(struct wl_listener *listener, void *data)
 	struct comp_toplevel *view = wl_container_of(listener, view, map);
 	log_xdg_state("map", view);
 	struct wlr_box *geo = &view->xdg_toplevel->base->geometry;
+	struct comp_output *o;
+	wl_list_for_each(o, &view->server->outputs, link) {
+		if (view->foreign_toplevel) {
+			wlr_foreign_toplevel_handle_v1_output_enter(view->foreign_toplevel, o->wlr_output);
+		}
+	}
+	foreign_toplevel_refresh(view);
 
 	struct wlr_output *out = wlr_output_layout_output_at(
 		view->server->output_layout, view->server->cursor->x, view->server->cursor->y);
@@ -909,6 +990,14 @@ static void xdg_shell_new_toplevel(struct wl_listener *listener, void *data)
 	view->tile_float = false;
 	view->tile_order = 0;
 	view->workspace = server->current_workspace;
+	view->foreign_toplevel = server->foreign_toplevel_manager ?
+		wlr_foreign_toplevel_handle_v1_create(server->foreign_toplevel_manager) : NULL;
+	if (view->foreign_toplevel) {
+		view->foreign_request_activate.notify = foreign_toplevel_handle_request_activate;
+		wl_signal_add(&view->foreign_toplevel->events.request_activate, &view->foreign_request_activate);
+		view->foreign_request_close.notify = foreign_toplevel_handle_request_close;
+		wl_signal_add(&view->foreign_toplevel->events.request_close, &view->foreign_request_close);
+	}
 
 	view->set_title.notify = toplevel_handle_set_title;
 	wl_signal_add(&xdg_toplevel->events.set_title, &view->set_title);
@@ -928,6 +1017,7 @@ static void xdg_shell_new_toplevel(struct wl_listener *listener, void *data)
 	view->request_resize.notify = toplevel_request_resize;
 	wl_signal_add(&xdg_toplevel->events.request_resize, &view->request_resize);
 	wl_list_insert(server->toplevels.prev, &view->link);
+	foreign_toplevel_refresh(view);
 }
 
 static void focus_toplevel(struct comp_server *server, struct comp_toplevel *toplevel)
@@ -949,6 +1039,7 @@ static void focus_toplevel(struct comp_server *server, struct comp_toplevel *top
 	if (prev && prev->xdg_toplevel->base->initialized) {
 		log_xdg_state("focus:deactivate-prev", prev);
 		wlr_xdg_toplevel_set_activated(prev->xdg_toplevel, false);
+		foreign_toplevel_refresh(prev);
 	}
 	log_xdg_state("focus:activate-new", toplevel);
 	wlr_xdg_toplevel_set_activated(toplevel->xdg_toplevel, true);
@@ -957,6 +1048,7 @@ static void focus_toplevel(struct comp_server *server, struct comp_toplevel *top
 		wlr_scene_node_raise_to_top(&toplevel->scene_tree->node);
 	}
 	server->focused_toplevel = toplevel;
+	foreign_toplevel_refresh(toplevel);
 	scroll_sync_to_focused(server);
 
 	struct wlr_seat *seat = server->seat;
@@ -1150,6 +1242,7 @@ void server_workspace_go(struct comp_server *server, int idx)
 	}
 	comp_config_sync_shell_env(server);
 	ext_workspace_notify(server);
+	foreign_toplevel_sync_all(server);
 }
 
 void server_workspace_relative(struct comp_server *server, int delta)
@@ -1201,6 +1294,7 @@ void server_workspace_move_focused(struct comp_server *server, int target)
 	}
 	comp_config_sync_shell_env(server);
 	server_sync_xdg_decorations(server);
+	foreign_toplevel_sync_all(server);
 }
 
 void server_tile_move_focused_n(struct comp_server *server, int steps)
@@ -2202,6 +2296,11 @@ bool server_init(struct comp_server *server)
 		wlr_scene_tree_create(&server->scene->tree);
 
 	server->xdg_shell = wlr_xdg_shell_create(dpy, 3);
+	server->foreign_toplevel_manager = wlr_foreign_toplevel_manager_v1_create(dpy);
+	if (!server->foreign_toplevel_manager) {
+		wlr_log(WLR_ERROR, "Failed to create wlr_foreign_toplevel_manager_v1");
+		return false;
+	}
 	server->new_output.notify = server_new_output;
 	wl_signal_add(&server->backend->events.new_output, &server->new_output);
 	server->new_input.notify = server_new_input;

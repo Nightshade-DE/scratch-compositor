@@ -35,6 +35,24 @@ window#waybar {
   color: #f87171;
 }
 
+#taskbar {
+  padding: 0 6px;
+}
+
+#taskbar button {
+  padding: 0 6px;
+  color: #a1a1aa;
+  background: transparent;
+}
+
+#taskbar button:hover {
+  color: #e4e4e7;
+}
+
+#taskbar button.active {
+  color: #fafafa;
+}
+
 #clock {
   padding: 0 10px;
   color: #a1a1aa;
