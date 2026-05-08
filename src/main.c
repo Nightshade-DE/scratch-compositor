@@ -33,6 +33,9 @@
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_tablet_tool.h>
+#include <wlr/types/wlr_tablet_v2.h>
+#include <wlr/types/wlr_touch.h>
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
@@ -42,6 +45,7 @@
 #include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/box.h>
+#include <wlr/util/edges.h>
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
 
@@ -49,10 +53,21 @@
 #include "ext_workspace.h"
 #include "server.h"
 
+struct comp_tablet_tool {
+	struct wlr_tablet_tool *wlr_tool;
+	struct wlr_tablet_v2_tablet_tool *v2_tool;
+	struct comp_tablet *tablet;
+	double tilt_x, tilt_y;
+	bool emulating_pointer_from_tip;
+	struct wl_listener destroy;
+	struct wl_listener set_cursor;
+};
+
 static void focus_toplevel(struct comp_server *server, struct comp_toplevel *toplevel);
 static struct wlr_output *primary_wlr_output(struct comp_server *server);
 static void process_cursor_motion(struct comp_server *server, uint32_t time_msec);
 static void begin_move(struct comp_server *server, struct comp_toplevel *view, bool swallow_left_release);
+static void begin_resize(struct comp_server *server, struct comp_toplevel *view, uint32_t edges);
 static void ipc_fini(struct comp_server *server);
 static bool ipc_init(struct comp_server *server);
 static bool server_reload_config(struct comp_server *server);
@@ -61,6 +76,13 @@ static int tile_sorted_index(struct comp_toplevel **arr, size_t n, struct comp_t
 static void toplevel_apply_decoration_mode(struct comp_toplevel *view);
 static void foreign_toplevel_refresh(struct comp_toplevel *view);
 static void foreign_toplevel_sync_all(struct comp_server *server);
+static void server_update_seat_capabilities(struct comp_server *server);
+static void layer_surface_try_keyboard_focus_click(struct comp_server *server, double lx, double ly);
+static void process_cursor_motion(struct comp_server *server, uint32_t time_msec);
+static void track_input_device(struct comp_server *server, struct wlr_input_device *dev);
+static struct comp_tablet *comp_tablet_from_wlr(struct comp_server *server, struct wlr_tablet *wt);
+static struct comp_tablet_tool *tablet_tool_get_or_create(struct comp_server *srv, struct comp_tablet *tab,
+	struct wlr_tablet_tool *wtool);
 
 /** True after `wlr_backend_start` so shutdown hook runs only for a real session. */
 static bool compositor_session_active;
@@ -470,6 +492,7 @@ static void output_destroy(struct wl_listener *listener, void *data)
 			wlr_foreign_toplevel_handle_v1_output_leave(t->foreign_toplevel, output->wlr_output);
 		}
 	}
+	server_apply_input_device_maps(output->server);
 	ext_workspace_on_output_remove(output->server, output->wlr_output);
 	wl_list_remove(&output->frame.link);
 	wl_list_remove(&output->commit.link);
@@ -525,6 +548,7 @@ static void server_new_output(struct wl_listener *listener, void *data)
 	}
 	ext_workspace_on_output_new(server, wlr_output);
 	layer_shell_arrange(server);
+	server_apply_input_device_maps(server);
 }
 
 static uint32_t tile_user_key_gen;
@@ -971,8 +995,18 @@ static void toplevel_request_move(struct wl_listener *listener, void *data)
 
 static void toplevel_request_resize(struct wl_listener *listener, void *data)
 {
-	(void)listener;
-	(void)data;
+	struct comp_toplevel *view = wl_container_of(listener, view, request_resize);
+	struct wlr_xdg_toplevel_resize_event *ev = data;
+	struct comp_server *server = view->server;
+
+	if (!view->xdg_toplevel->base->surface->mapped) {
+		return;
+	}
+	if ((server->layout == COMP_LAYOUT_TILE || server->layout == COMP_LAYOUT_SCROLL) && !view->tile_float) {
+		return;
+	}
+	focus_toplevel(server, view);
+	begin_resize(server, view, ev->edges);
 }
 
 static void xdg_shell_new_toplevel(struct wl_listener *listener, void *data)
@@ -1070,6 +1104,25 @@ static void begin_move(struct comp_server *server, struct comp_toplevel *view, b
 	server->grab_cursor_y = server->cursor->y;
 	server->grab_view_x = view->scene_tree->node.x;
 	server->grab_view_y = view->scene_tree->node.y;
+}
+
+static void begin_resize(struct comp_server *server, struct comp_toplevel *view, uint32_t edges)
+{
+	if (!view || !view->xdg_toplevel->base->surface->mapped) {
+		return;
+	}
+	server->grab = COMP_GRAB_RESIZE;
+	server->grabbed_toplevel = view;
+	server->grab_cursor_x = server->cursor->x;
+	server->grab_cursor_y = server->cursor->y;
+	server->resize_edges = edges;
+
+	struct wlr_box geo = view->xdg_toplevel->base->geometry;
+	server->grab_view_x = view->scene_tree->node.x + geo.x;
+	server->grab_view_y = view->scene_tree->node.y + geo.y;
+	server->grab_view_width = geo.width;
+	server->grab_view_height = geo.height;
+	server->swallow_left_release = false;
 }
 
 static void tile_grid_dims(size_t n, int *cols_out, int *rows_out)
@@ -1879,6 +1932,7 @@ static bool server_reload_config(struct comp_server *server)
 	server_sync_xdg_decorations(server);
 	comp_config_sync_shell_env(server);
 	comp_config_run_reload(server->config);
+	server_apply_input_device_maps(server);
 	wlr_log(WLR_INFO, "reload: loaded config from %s", path);
 	return true;
 }
@@ -2035,6 +2089,444 @@ static void keyboard_handle_modifiers(struct wl_listener *listener, void *data)
 	wlr_seat_keyboard_notify_modifiers(kbd->server->seat, &wlr_kbd->modifiers);
 }
 
+static struct wlr_output *output_by_name(struct comp_server *server, const char *name)
+{
+	if (!name || !name[0]) {
+		return NULL;
+	}
+	struct comp_output *o;
+	wl_list_for_each(o, &server->outputs, link) {
+		if (strcmp(o->wlr_output->name, name) == 0) {
+			return o->wlr_output;
+		}
+	}
+	return NULL;
+}
+
+void server_apply_input_device_maps(struct comp_server *server)
+{
+	if (!server->cursor || !server->config) {
+		return;
+	}
+	struct comp_tracked_input *ti;
+	wl_list_for_each(ti, &server->tracked_inputs, link) {
+		struct wlr_input_device *dev = ti->dev;
+		uint32_t want = 0;
+		switch (dev->type) {
+		case WLR_INPUT_DEVICE_TOUCH:
+			want = COMP_INPUT_MAP_TYPE_TOUCH;
+			break;
+		case WLR_INPUT_DEVICE_TABLET:
+			want = COMP_INPUT_MAP_TYPE_TABLET;
+			break;
+		case WLR_INPUT_DEVICE_POINTER:
+			want = COMP_INPUT_MAP_TYPE_POINTER;
+			break;
+		default:
+			want = 0;
+			break;
+		}
+		if (!want) {
+			continue;
+		}
+		struct wlr_output *mapped = NULL;
+		for (size_t i = 0; i < server->config->n_input_map_rules; i++) {
+			const struct comp_input_map_rule *r = &server->config->input_map_rules[i];
+			if (!(r->types & want) || !r->have_name) {
+				continue;
+			}
+			if (regexec(&r->name_re, dev->name, 0, NULL, 0) != 0) {
+				continue;
+			}
+			mapped = output_by_name(server, r->output_name);
+			if (!mapped) {
+				wlr_log(WLR_INFO, "input_map: output '%s' not found for device '%s' (trying next rule)",
+					r->output_name, dev->name);
+				continue;
+			}
+			break;
+		}
+		wlr_cursor_map_input_to_output(server->cursor, dev, mapped);
+		if (mapped) {
+			wlr_log(WLR_INFO, "input_map: device '%s' -> output '%s'", dev->name, mapped->name);
+		}
+	}
+}
+
+static void tracked_input_destroy(struct wl_listener *listener, void *data)
+{
+	(void)data;
+	struct comp_tracked_input *ti = wl_container_of(listener, ti, destroy);
+	wl_list_remove(&ti->destroy.link);
+	wl_list_remove(&ti->link);
+	server_update_seat_capabilities(ti->server);
+	server_apply_input_device_maps(ti->server);
+	free(ti);
+}
+
+static void track_input_device(struct comp_server *server, struct wlr_input_device *dev)
+{
+	struct comp_tracked_input *ti = calloc(1, sizeof(*ti));
+	if (!ti) {
+		wlr_log(WLR_ERROR, "Out of memory allocating tracked input");
+		return;
+	}
+	ti->server = server;
+	ti->dev = dev;
+	ti->destroy.notify = tracked_input_destroy;
+	wl_signal_add(&dev->events.destroy, &ti->destroy);
+	wl_list_insert(&server->tracked_inputs, &ti->link);
+	server_update_seat_capabilities(server);
+	server_apply_input_device_maps(server);
+}
+
+static void server_update_seat_capabilities(struct comp_server *server)
+{
+	uint32_t caps = WL_SEAT_CAPABILITY_POINTER | WL_SEAT_CAPABILITY_KEYBOARD;
+	struct comp_tracked_input *ti;
+	wl_list_for_each(ti, &server->tracked_inputs, link) {
+		if (ti->dev->type == WLR_INPUT_DEVICE_TOUCH) {
+			caps |= WL_SEAT_CAPABILITY_TOUCH;
+			break;
+		}
+	}
+	wlr_seat_set_capabilities(server->seat, caps);
+}
+
+static struct comp_tablet *comp_tablet_from_wlr(struct comp_server *server, struct wlr_tablet *wt)
+{
+	struct comp_tablet *t;
+	wl_list_for_each(t, &server->tablets, link) {
+		if (t->wlr_tablet == wt) {
+			return t;
+		}
+	}
+	return NULL;
+}
+
+static void comp_tablet_handle_destroy(struct wl_listener *listener, void *data)
+{
+	(void)data;
+	struct comp_tablet *tab = wl_container_of(listener, tab, destroy);
+	wl_list_remove(&tab->destroy.link);
+	wl_list_remove(&tab->link);
+	free(tab);
+}
+
+static void tablet_tool_set_cursor(struct wl_listener *listener, void *data)
+{
+	struct comp_tablet_tool *tt = wl_container_of(listener, tt, set_cursor);
+	struct wlr_tablet_v2_event_cursor *ev = data;
+	struct comp_server *server = tt->tablet->server;
+	wlr_cursor_set_surface(server->cursor, ev->surface, ev->hotspot_x, ev->hotspot_y);
+}
+
+static void tablet_tool_handle_destroy(struct wl_listener *listener, void *data)
+{
+	(void)data;
+	struct comp_tablet_tool *tt = wl_container_of(listener, tt, destroy);
+	wl_list_remove(&tt->destroy.link);
+	wl_list_remove(&tt->set_cursor.link);
+	tt->wlr_tool->data = NULL;
+	free(tt);
+}
+
+static struct comp_tablet_tool *tablet_tool_get_or_create(struct comp_server *srv, struct comp_tablet *tab,
+	struct wlr_tablet_tool *wtool)
+{
+	if (wtool->data) {
+		return wtool->data;
+	}
+	struct comp_tablet_tool *tt = calloc(1, sizeof(*tt));
+	if (!tt) {
+		return NULL;
+	}
+	tt->wlr_tool = wtool;
+	tt->tablet = tab;
+	tt->v2_tool = wlr_tablet_tool_create(srv->tablet_manager, srv->seat, wtool);
+	if (!tt->v2_tool) {
+		free(tt);
+		return NULL;
+	}
+	tt->destroy.notify = tablet_tool_handle_destroy;
+	wl_signal_add(&wtool->events.destroy, &tt->destroy);
+	tt->set_cursor.notify = tablet_tool_set_cursor;
+	wl_signal_add(&tt->v2_tool->events.set_cursor, &tt->set_cursor);
+	wtool->data = tt;
+	return tt;
+}
+
+static void tablet_tool_position(struct comp_server *server, struct comp_tablet_tool *tt, bool change_x,
+	bool change_y, double x, double y, uint32_t time_msec)
+{
+	if (!change_x && !change_y) {
+		return;
+	}
+	struct wlr_input_device *tab_dev = &tt->tablet->wlr_tablet->base;
+	wlr_cursor_warp_absolute(server->cursor, tab_dev, change_x ? x : NAN, change_y ? y : NAN);
+
+	double sx, sy;
+	struct wlr_surface *surface = surface_at(server, server->cursor->x, server->cursor->y, &sx, &sy);
+	struct wlr_tablet_v2_tablet *v2tab = tt->tablet->v2_tablet;
+
+	if (surface && (wlr_surface_accepts_tablet_v2(surface, v2tab) ||
+			wlr_tablet_tool_v2_has_implicit_grab(tt->v2_tool))) {
+		wlr_tablet_v2_tablet_tool_notify_proximity_in(tt->v2_tool, v2tab, surface);
+		wlr_tablet_v2_tablet_tool_notify_motion(tt->v2_tool, sx, sy);
+	} else {
+		wlr_tablet_v2_tablet_tool_notify_proximity_out(tt->v2_tool);
+		process_cursor_motion(server, time_msec);
+		wlr_seat_pointer_notify_frame(server->seat);
+	}
+}
+
+static void server_cursor_tablet_tool_axis(struct wl_listener *listener, void *data)
+{
+	struct comp_server *server = wl_container_of(listener, server, cursor_tablet_tool_axis);
+	struct wlr_tablet_tool_axis_event *event = data;
+	struct comp_tablet *tab = comp_tablet_from_wlr(server, event->tablet);
+	if (!tab) {
+		return;
+	}
+	struct comp_tablet_tool *tt = tablet_tool_get_or_create(server, tab, event->tool);
+	if (!tt) {
+		return;
+	}
+
+	tablet_tool_position(server, tt, (bool)(event->updated_axes & WLR_TABLET_TOOL_AXIS_X),
+		(bool)(event->updated_axes & WLR_TABLET_TOOL_AXIS_Y), event->x, event->y, event->time_msec);
+
+	if (event->updated_axes & WLR_TABLET_TOOL_AXIS_PRESSURE) {
+		wlr_tablet_v2_tablet_tool_notify_pressure(tt->v2_tool, event->pressure);
+	}
+	if (event->updated_axes & WLR_TABLET_TOOL_AXIS_DISTANCE) {
+		wlr_tablet_v2_tablet_tool_notify_distance(tt->v2_tool, event->distance);
+	}
+	if (event->updated_axes & WLR_TABLET_TOOL_AXIS_TILT_X) {
+		tt->tilt_x = event->tilt_x;
+	}
+	if (event->updated_axes & WLR_TABLET_TOOL_AXIS_TILT_Y) {
+		tt->tilt_y = event->tilt_y;
+	}
+	if (event->updated_axes & (WLR_TABLET_TOOL_AXIS_TILT_X | WLR_TABLET_TOOL_AXIS_TILT_Y)) {
+		wlr_tablet_v2_tablet_tool_notify_tilt(tt->v2_tool, tt->tilt_x, tt->tilt_y);
+	}
+	if (event->updated_axes & WLR_TABLET_TOOL_AXIS_ROTATION) {
+		wlr_tablet_v2_tablet_tool_notify_rotation(tt->v2_tool, event->rotation);
+	}
+	if (event->updated_axes & WLR_TABLET_TOOL_AXIS_SLIDER) {
+		wlr_tablet_v2_tablet_tool_notify_slider(tt->v2_tool, event->slider);
+	}
+	if (event->updated_axes & WLR_TABLET_TOOL_AXIS_WHEEL) {
+		wlr_tablet_v2_tablet_tool_notify_wheel(tt->v2_tool, event->wheel_delta, 0);
+	}
+}
+
+static void server_cursor_tablet_tool_proximity(struct wl_listener *listener, void *data)
+{
+	struct comp_server *server = wl_container_of(listener, server, cursor_tablet_tool_proximity);
+	struct wlr_tablet_tool_proximity_event *event = data;
+	struct comp_tablet *tab = comp_tablet_from_wlr(server, event->tablet);
+	if (!tab) {
+		return;
+	}
+	struct comp_tablet_tool *tt = tablet_tool_get_or_create(server, tab, event->tool);
+	if (!tt) {
+		return;
+	}
+	if (event->state == WLR_TABLET_TOOL_PROXIMITY_OUT) {
+		wlr_tablet_v2_tablet_tool_notify_proximity_out(tt->v2_tool);
+		return;
+	}
+	tablet_tool_position(server, tt, true, true, event->x, event->y, event->time_msec);
+}
+
+static void server_cursor_tablet_tool_tip(struct wl_listener *listener, void *data)
+{
+	struct comp_server *server = wl_container_of(listener, server, cursor_tablet_tool_tip);
+	struct wlr_tablet_tool_tip_event *event = data;
+	struct comp_tablet *tab = comp_tablet_from_wlr(server, event->tablet);
+	if (!tab) {
+		return;
+	}
+	struct comp_tablet_tool *tt = tablet_tool_get_or_create(server, tab, event->tool);
+	if (!tt) {
+		return;
+	}
+	double sx, sy;
+	struct wlr_surface *surface = surface_at(server, server->cursor->x, server->cursor->y, &sx, &sy);
+	struct wlr_tablet_v2_tablet *v2tab = tab->v2_tablet;
+
+	if (event->state == WLR_TABLET_TOOL_TIP_UP) {
+		if (tt->emulating_pointer_from_tip) {
+			tt->emulating_pointer_from_tip = false;
+			wlr_seat_pointer_notify_button(server->seat, event->time_msec, BTN_LEFT,
+				WL_POINTER_BUTTON_STATE_RELEASED);
+			wlr_seat_pointer_notify_frame(server->seat);
+		} else {
+			wlr_tablet_v2_tablet_tool_notify_up(tt->v2_tool);
+		}
+		return;
+	}
+
+	/* TIP_DOWN */
+	if (!surface || !wlr_surface_accepts_tablet_v2(surface, v2tab)) {
+		tt->emulating_pointer_from_tip = true;
+		process_cursor_motion(server, event->time_msec);
+		struct comp_toplevel *v = toplevel_at(server, server->cursor->x, server->cursor->y, &sx, &sy);
+		if (v) {
+			focus_toplevel(server, v);
+		} else {
+			layer_surface_try_keyboard_focus_click(server, server->cursor->x, server->cursor->y);
+		}
+		wlr_seat_pointer_notify_button(server->seat, event->time_msec, BTN_LEFT,
+			WL_POINTER_BUTTON_STATE_PRESSED);
+		wlr_seat_pointer_notify_frame(server->seat);
+		return;
+	}
+
+	wlr_tablet_v2_tablet_tool_notify_proximity_in(tt->v2_tool, v2tab, surface);
+	wlr_tablet_v2_tablet_tool_notify_motion(tt->v2_tool, sx, sy);
+	wlr_tablet_v2_tablet_tool_notify_down(tt->v2_tool);
+	struct comp_toplevel *v = toplevel_at(server, server->cursor->x, server->cursor->y, &sx, &sy);
+	if (v) {
+		focus_toplevel(server, v);
+	} else {
+		layer_surface_try_keyboard_focus_click(server, server->cursor->x, server->cursor->y);
+	}
+}
+
+static void server_cursor_tablet_tool_button(struct wl_listener *listener, void *data)
+{
+	struct comp_server *server = wl_container_of(listener, server, cursor_tablet_tool_button);
+	struct wlr_tablet_tool_button_event *event = data;
+	struct comp_tablet *tab = comp_tablet_from_wlr(server, event->tablet);
+	if (!tab) {
+		return;
+	}
+	struct comp_tablet_tool *tt = tablet_tool_get_or_create(server, tab, event->tool);
+	if (!tt) {
+		return;
+	}
+	double sx, sy;
+	struct wlr_surface *surface = surface_at(server, server->cursor->x, server->cursor->y, &sx, &sy);
+	struct wlr_tablet_v2_tablet *v2tab = tab->v2_tablet;
+	if (!surface || !wlr_surface_accepts_tablet_v2(surface, v2tab)) {
+		uint32_t btn = BTN_RIGHT;
+		enum wl_pointer_button_state st = event->state == WLR_BUTTON_PRESSED
+			? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED;
+		process_cursor_motion(server, event->time_msec);
+		wlr_seat_pointer_notify_button(server->seat, event->time_msec, btn, st);
+		wlr_seat_pointer_notify_frame(server->seat);
+		return;
+	}
+	wlr_tablet_v2_tablet_tool_notify_button(tt->v2_tool, event->button,
+		(enum zwp_tablet_pad_v2_button_state)event->state);
+}
+
+static void server_cursor_touch_down(struct wl_listener *listener, void *data)
+{
+	struct comp_server *server = wl_container_of(listener, server, cursor_touch_down);
+	struct wlr_touch_down_event *event = data;
+	double lx, ly;
+	wlr_cursor_absolute_to_layout_coords(server->cursor, &event->touch->base, event->x, event->y, &lx, &ly);
+
+	double sx, sy;
+	struct wlr_surface *surface = surface_at(server, lx, ly, &sx, &sy);
+
+	if (surface && wlr_surface_accepts_touch(surface, server->seat)) {
+		server->touch_pointer_emu = false;
+		wlr_seat_touch_notify_down(server->seat, surface, event->time_msec, event->touch_id, sx, sy);
+		struct comp_toplevel *v = toplevel_at(server, lx, ly, &sx, &sy);
+		if (v) {
+			focus_toplevel(server, v);
+		} else {
+			layer_surface_try_keyboard_focus_click(server, lx, ly);
+		}
+		return;
+	}
+
+	wlr_cursor_warp_closest(server->cursor, &event->touch->base, lx, ly);
+	process_cursor_motion(server, event->time_msec);
+	struct comp_toplevel *v = toplevel_at(server, server->cursor->x, server->cursor->y, &sx, &sy);
+	if (v) {
+		focus_toplevel(server, v);
+	} else {
+		layer_surface_try_keyboard_focus_click(server, server->cursor->x, server->cursor->y);
+	}
+	if (server->grab == COMP_GRAB_NONE) {
+		server->touch_pointer_emu = true;
+		server->touch_pointer_emu_id = event->touch_id;
+		wlr_seat_pointer_notify_button(server->seat, event->time_msec, BTN_LEFT,
+			WL_POINTER_BUTTON_STATE_PRESSED);
+		wlr_seat_pointer_notify_frame(server->seat);
+	}
+}
+
+static void server_cursor_touch_up(struct wl_listener *listener, void *data)
+{
+	struct comp_server *server = wl_container_of(listener, server, cursor_touch_up);
+	struct wlr_touch_up_event *event = data;
+	if (server->touch_pointer_emu && event->touch_id == server->touch_pointer_emu_id) {
+		server->touch_pointer_emu = false;
+		if (server->grab == COMP_GRAB_NONE) {
+			wlr_seat_pointer_notify_button(server->seat, event->time_msec, BTN_LEFT,
+				WL_POINTER_BUTTON_STATE_RELEASED);
+			wlr_seat_pointer_notify_frame(server->seat);
+		}
+		return;
+	}
+	wlr_seat_touch_notify_up(server->seat, event->time_msec, event->touch_id);
+}
+
+static void server_cursor_touch_motion(struct wl_listener *listener, void *data)
+{
+	struct comp_server *server = wl_container_of(listener, server, cursor_touch_motion);
+	struct wlr_touch_motion_event *event = data;
+	double lx, ly;
+	wlr_cursor_absolute_to_layout_coords(server->cursor, &event->touch->base, event->x, event->y, &lx, &ly);
+	double sx, sy;
+	if (server->touch_pointer_emu && event->touch_id == server->touch_pointer_emu_id) {
+		wlr_cursor_warp_closest(server->cursor, &event->touch->base, lx, ly);
+		process_cursor_motion(server, event->time_msec);
+		return;
+	}
+	struct wlr_surface *surface = surface_at(server, lx, ly, &sx, &sy);
+	if (surface && wlr_surface_accepts_touch(surface, server->seat)) {
+		wlr_seat_touch_notify_motion(server->seat, event->time_msec, event->touch_id, sx, sy);
+	} else {
+		wlr_cursor_warp_closest(server->cursor, &event->touch->base, lx, ly);
+		process_cursor_motion(server, event->time_msec);
+	}
+}
+
+static void server_cursor_touch_cancel(struct wl_listener *listener, void *data)
+{
+	(void)data;
+	struct comp_server *server = wl_container_of(listener, server, cursor_touch_cancel);
+	struct wlr_touch_cancel_event *event = data;
+	if (server->touch_pointer_emu && event->touch_id == server->touch_pointer_emu_id) {
+		server->touch_pointer_emu = false;
+		if (server->grab == COMP_GRAB_NONE) {
+			wlr_seat_pointer_notify_button(server->seat, event->time_msec, BTN_LEFT,
+				WL_POINTER_BUTTON_STATE_RELEASED);
+			wlr_seat_pointer_notify_frame(server->seat);
+		}
+		return;
+	}
+	struct wlr_touch_point *pt = wlr_seat_touch_get_point(server->seat, event->touch_id);
+	if (pt && pt->client) {
+		wlr_seat_touch_notify_cancel(server->seat, pt->client);
+	}
+}
+
+static void server_cursor_touch_frame(struct wl_listener *listener, void *data)
+{
+	(void)data;
+	struct comp_server *server = wl_container_of(listener, server, cursor_touch_frame);
+	wlr_seat_touch_notify_frame(server->seat);
+}
+
 static void server_new_input(struct wl_listener *listener, void *data)
 {
 	struct comp_server *server = wl_container_of(listener, server, new_input);
@@ -2070,16 +2562,44 @@ static void server_new_input(struct wl_listener *listener, void *data)
 		wl_signal_add(&wlr_kbd->events.modifiers, &kbd->modifiers);
 
 		wlr_seat_set_keyboard(server->seat, wlr_kbd);
-		wlr_seat_set_capabilities(server->seat,
-			WL_SEAT_CAPABILITY_POINTER | WL_SEAT_CAPABILITY_KEYBOARD);
+		server_update_seat_capabilities(server);
 		/* Do not wlr_cursor_attach_input_device(keyboard): only pointer/touch/tablet. */
 		break;
 	}
 	case WLR_INPUT_DEVICE_POINTER:
 		wlr_cursor_attach_input_device(server->cursor, dev);
-		wlr_seat_set_capabilities(server->seat,
-			WL_SEAT_CAPABILITY_POINTER | WL_SEAT_CAPABILITY_KEYBOARD);
+		track_input_device(server, dev);
+		server_update_seat_capabilities(server);
 		break;
+	case WLR_INPUT_DEVICE_TOUCH:
+		wlr_cursor_attach_input_device(server->cursor, dev);
+		track_input_device(server, dev);
+		server_update_seat_capabilities(server);
+		break;
+	case WLR_INPUT_DEVICE_TABLET: {
+		struct comp_tablet *tab = calloc(1, sizeof(*tab));
+		if (!tab) {
+			wlr_log(WLR_ERROR, "Out of memory allocating tablet state");
+			return;
+		}
+		tab->server = server;
+		tab->dev = dev;
+		tab->wlr_tablet = wlr_tablet_from_input_device(dev);
+		tab->v2_tablet = wlr_tablet_create(server->tablet_manager, server->seat, dev);
+		if (!tab->v2_tablet) {
+			free(tab);
+			wlr_log(WLR_ERROR, "wlr_tablet_create failed for %s", dev->name);
+			return;
+		}
+		tab->destroy.notify = comp_tablet_handle_destroy;
+		wl_signal_add(&dev->events.destroy, &tab->destroy);
+		wl_list_insert(&server->tablets, &tab->link);
+		wlr_cursor_attach_input_device(server->cursor, dev);
+		track_input_device(server, dev);
+		server_update_seat_capabilities(server);
+		wlr_log(WLR_INFO, "tablet: %s", dev->name);
+		break;
+	}
 	default:
 		break;
 	}
@@ -2093,6 +2613,44 @@ static void process_cursor_motion(struct comp_server *server, uint32_t time_msec
 		double dy = server->cursor->y - server->grab_cursor_y;
 		wlr_scene_node_set_position(&v->scene_tree->node,
 			server->grab_view_x + (int)dx, server->grab_view_y + (int)dy);
+	} else if (server->grab == COMP_GRAB_RESIZE && server->grabbed_toplevel) {
+		struct comp_toplevel *v = server->grabbed_toplevel;
+		double dx = server->cursor->x - server->grab_cursor_x;
+		double dy = server->cursor->y - server->grab_cursor_y;
+
+		int x = server->grab_view_x;
+		int y = server->grab_view_y;
+		int w = server->grab_view_width;
+		int h = server->grab_view_height;
+
+		if (server->resize_edges & WLR_EDGE_LEFT) {
+			x = server->grab_view_x + (int)dx;
+			w = server->grab_view_width - (int)dx;
+		} else if (server->resize_edges & WLR_EDGE_RIGHT) {
+			w = server->grab_view_width + (int)dx;
+		}
+		if (server->resize_edges & WLR_EDGE_TOP) {
+			y = server->grab_view_y + (int)dy;
+			h = server->grab_view_height - (int)dy;
+		} else if (server->resize_edges & WLR_EDGE_BOTTOM) {
+			h = server->grab_view_height + (int)dy;
+		}
+
+		if (w < 1) {
+			if (server->resize_edges & WLR_EDGE_LEFT) {
+				x += w - 1;
+			}
+			w = 1;
+		}
+		if (h < 1) {
+			if (server->resize_edges & WLR_EDGE_TOP) {
+				y += h - 1;
+			}
+			h = 1;
+		}
+
+		wlr_scene_node_set_position(&v->scene_tree->node, x, y);
+		wlr_xdg_toplevel_set_size(v->xdg_toplevel, w, h);
 	}
 
 	double sx, sy;
@@ -2163,11 +2721,13 @@ static void server_cursor_button(struct wl_listener *listener, void *data)
 		mods = wlr_keyboard_get_modifiers(kbd);
 	}
 
-	if (ev->state == WL_POINTER_BUTTON_STATE_RELEASED && server->grab == COMP_GRAB_MOVE) {
+	if (ev->state == WL_POINTER_BUTTON_STATE_RELEASED && server->grab != COMP_GRAB_NONE) {
 		struct comp_toplevel *dragged = server->grabbed_toplevel;
+		bool was_move = server->grab == COMP_GRAB_MOVE;
 		server->grab = COMP_GRAB_NONE;
 		server->grabbed_toplevel = NULL;
-		if ((server->layout == COMP_LAYOUT_TILE || server->layout == COMP_LAYOUT_SCROLL) && dragged) {
+		server->resize_edges = 0;
+		if (was_move && (server->layout == COMP_LAYOUT_TILE || server->layout == COMP_LAYOUT_SCROLL) && dragged) {
 			double sx, sy;
 			struct comp_toplevel *drop =
 				toplevel_at(server, server->cursor->x, server->cursor->y, &sx, &sy);
@@ -2332,6 +2892,14 @@ bool server_init(struct comp_server *server)
 	wl_signal_add(&server->layer_shell->events.new_surface, &server->layer_shell_new_surface);
 
 	server->seat = wlr_seat_create(dpy, "seat0");
+	server->tablet_manager = wlr_tablet_v2_create(dpy);
+	if (!server->tablet_manager) {
+		wlr_log(WLR_ERROR, "Failed to create wlr_tablet_v2 manager");
+		return false;
+	}
+	wl_list_init(&server->tablets);
+	wl_list_init(&server->tracked_inputs);
+
 	server->cursor_motion.notify = server_cursor_motion;
 	wl_signal_add(&server->cursor->events.motion, &server->cursor_motion);
 	server->cursor_motion_absolute.notify = server_cursor_motion_absolute;
@@ -2342,6 +2910,25 @@ bool server_init(struct comp_server *server)
 	wl_signal_add(&server->cursor->events.axis, &server->cursor_axis);
 	server->cursor_frame.notify = server_cursor_frame;
 	wl_signal_add(&server->cursor->events.frame, &server->cursor_frame);
+	server->cursor_touch_down.notify = server_cursor_touch_down;
+	wl_signal_add(&server->cursor->events.touch_down, &server->cursor_touch_down);
+	server->cursor_touch_up.notify = server_cursor_touch_up;
+	wl_signal_add(&server->cursor->events.touch_up, &server->cursor_touch_up);
+	server->cursor_touch_motion.notify = server_cursor_touch_motion;
+	wl_signal_add(&server->cursor->events.touch_motion, &server->cursor_touch_motion);
+	server->cursor_touch_cancel.notify = server_cursor_touch_cancel;
+	wl_signal_add(&server->cursor->events.touch_cancel, &server->cursor_touch_cancel);
+	server->cursor_touch_frame.notify = server_cursor_touch_frame;
+	wl_signal_add(&server->cursor->events.touch_frame, &server->cursor_touch_frame);
+	server->cursor_tablet_tool_axis.notify = server_cursor_tablet_tool_axis;
+	wl_signal_add(&server->cursor->events.tablet_tool_axis, &server->cursor_tablet_tool_axis);
+	server->cursor_tablet_tool_proximity.notify = server_cursor_tablet_tool_proximity;
+	wl_signal_add(&server->cursor->events.tablet_tool_proximity, &server->cursor_tablet_tool_proximity);
+	server->cursor_tablet_tool_tip.notify = server_cursor_tablet_tool_tip;
+	wl_signal_add(&server->cursor->events.tablet_tool_tip, &server->cursor_tablet_tool_tip);
+	server->cursor_tablet_tool_button.notify = server_cursor_tablet_tool_button;
+	wl_signal_add(&server->cursor->events.tablet_tool_button, &server->cursor_tablet_tool_button);
+
 	server->seat_request_cursor.notify = seat_request_cursor;
 	wl_signal_add(&server->seat->events.request_set_cursor, &server->seat_request_cursor);
 	server->seat_request_set_selection.notify = seat_request_set_selection;
@@ -2356,6 +2943,7 @@ bool server_init(struct comp_server *server)
 		wlr_log(WLR_ERROR, "ipc: disabled (initialization failed)");
 		server->ipc_enabled = false;
 	}
+	server_update_seat_capabilities(server);
 	ext_workspace_init(server);
 	return true;
 }

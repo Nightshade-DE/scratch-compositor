@@ -94,6 +94,14 @@ void comp_config_free(struct comp_config *cfg)
 		decoration_rule_destroy(&cfg->decoration_rules[i]);
 	}
 	free(cfg->decoration_rules);
+	for (size_t i = 0; i < cfg->n_input_map_rules; i++) {
+		struct comp_input_map_rule *r = &cfg->input_map_rules[i];
+		if (r->have_name) {
+			regfree(&r->name_re);
+		}
+		free(r->output_name);
+	}
+	free(cfg->input_map_rules);
 	free(cfg->hook_startup);
 	free(cfg->hook_shutdown);
 	free(cfg->hook_reload);
@@ -867,6 +875,108 @@ static bool parse_tile_mode(const char *v, bool *float_out)
 	return false;
 }
 
+struct input_map_parse {
+	char *match_pat;
+	char *output_name;
+	char *type_str;
+};
+
+static void input_map_parse_reset(struct input_map_parse *p)
+{
+	free(p->match_pat);
+	free(p->output_name);
+	free(p->type_str);
+	memset(p, 0, sizeof(*p));
+}
+
+static bool parse_input_map_type_field(const char *value, uint32_t *types_out, size_t line_no, const char *path)
+{
+	if (!value || !value[0]) {
+		*types_out = COMP_INPUT_MAP_TYPE_TOUCH | COMP_INPUT_MAP_TYPE_TABLET;
+		return true;
+	}
+	char *buf = strdup(value);
+	if (!buf) {
+		return false;
+	}
+	*types_out = 0;
+	for (char *tok = strtok(buf, ", \t"); tok; tok = strtok(NULL, ", \t")) {
+		if (!strcasecmp(tok, "touch")) {
+			*types_out |= COMP_INPUT_MAP_TYPE_TOUCH;
+		} else if (!strcasecmp(tok, "tablet") || !strcasecmp(tok, "stylus") || !strcasecmp(tok, "pen")) {
+			*types_out |= COMP_INPUT_MAP_TYPE_TABLET;
+		} else if (!strcasecmp(tok, "pointer") || !strcasecmp(tok, "mouse")) {
+			*types_out |= COMP_INPUT_MAP_TYPE_POINTER;
+		} else if (!strcasecmp(tok, "all") || !strcasecmp(tok, "both")) {
+			*types_out |= COMP_INPUT_MAP_TYPE_TOUCH | COMP_INPUT_MAP_TYPE_TABLET | COMP_INPUT_MAP_TYPE_POINTER;
+		} else {
+			wlr_log(WLR_ERROR, "%s:%zu: unknown input_map type token '%s' (use touch, tablet, pointer, or all)",
+				path, line_no, tok);
+			free(buf);
+			return false;
+		}
+	}
+	free(buf);
+	if (*types_out == 0) {
+		wlr_log(WLR_ERROR, "%s:%zu: input_map type= is empty", path, line_no);
+		return false;
+	}
+	return true;
+}
+
+static bool flush_input_map_rule(struct comp_config *cfg, struct input_map_parse *p, size_t line_no,
+	const char *path)
+{
+	const bool have_match = p->match_pat && p->match_pat[0];
+	const bool have_out = p->output_name && p->output_name[0];
+	if (!have_match && !have_out) {
+		input_map_parse_reset(p);
+		(void)line_no;
+		(void)path;
+		return true;
+	}
+	if (!have_match || !have_out) {
+		wlr_log(WLR_ERROR, "%s:%zu: [input_map] needs both match= and output=", path, line_no);
+		input_map_parse_reset(p);
+		return false;
+	}
+	uint32_t types = 0;
+	if (!parse_input_map_type_field(p->type_str, &types, line_no, path)) {
+		input_map_parse_reset(p);
+		return false;
+	}
+	struct comp_input_map_rule rule;
+	memset(&rule, 0, sizeof(rule));
+	rule.types = types;
+	rule.output_name = xstrdup(p->output_name);
+	if (!rule.output_name) {
+		input_map_parse_reset(p);
+		return false;
+	}
+	int err = regcomp(&rule.name_re, p->match_pat, REG_EXTENDED | REG_NOSUB);
+	if (err != 0) {
+		char errbuf[128];
+		regerror(err, NULL, errbuf, sizeof(errbuf));
+		wlr_log(WLR_ERROR, "%s:%zu: bad input_map match regex: %s", path, line_no, errbuf);
+		free(rule.output_name);
+		input_map_parse_reset(p);
+		return false;
+	}
+	rule.have_name = true;
+	input_map_parse_reset(p);
+
+	struct comp_input_map_rule *nr =
+		realloc(cfg->input_map_rules, (cfg->n_input_map_rules + 1) * sizeof(*nr));
+	if (!nr) {
+		regfree(&rule.name_re);
+		free(rule.output_name);
+		return false;
+	}
+	cfg->input_map_rules = nr;
+	cfg->input_map_rules[cfg->n_input_map_rules++] = rule;
+	return true;
+}
+
 bool comp_config_decoration_prefer_server_side_tile_scroll(const struct comp_config *cfg, const char *app_id,
 	const char *title)
 {
@@ -944,6 +1054,8 @@ bool comp_config_load(const char *path, struct comp_config **cfg_out)
 	bool in_layout_anim = false;
 	bool in_decoration = false;
 	bool in_decoration_rule = false;
+	bool in_input_map = false;
+	struct input_map_parse cur_imap = {0};
 	char linebuf[4096];
 	size_t line_no = 0;
 	bool ok = true;
@@ -968,6 +1080,10 @@ bool comp_config_load(const char *path, struct comp_config **cfg_out)
 				ok = false;
 				break;
 			}
+			if (in_input_map && !flush_input_map_rule(cfg, &cur_imap, line_no, path)) {
+				ok = false;
+				break;
+			}
 			keybind_clear(&cur);
 			tile_rule_parse_reset(&cur_tile);
 			decoration_rule_parse_reset(&cur_dec);
@@ -977,6 +1093,7 @@ bool comp_config_load(const char *path, struct comp_config **cfg_out)
 			in_layout_anim = false;
 			in_decoration = false;
 			in_decoration_rule = false;
+			in_input_map = false;
 			if (!strcasecmp(line, "[bind]")) {
 				in_bind = true;
 			} else if (!strcasecmp(line, "[tile_rule]") || !strcasecmp(line, "[tilerule]")) {
@@ -989,13 +1106,16 @@ bool comp_config_load(const char *path, struct comp_config **cfg_out)
 				in_decoration = true;
 			} else if (!strcasecmp(line, "[decoration_rule]")) {
 				in_decoration_rule = true;
+			} else if (!strcasecmp(line, "[input_map]")) {
+				in_input_map = true;
 			} else {
 				wlr_log(WLR_ERROR, "%s:%zu: unknown section %s", path, line_no, line);
 				ok = false;
 			}
 			continue;
 		}
-		if (!in_bind && !in_tile && !in_hooks && !in_layout_anim && !in_decoration && !in_decoration_rule) {
+		if (!in_bind && !in_tile && !in_hooks && !in_layout_anim && !in_decoration && !in_decoration_rule &&
+		    !in_input_map) {
 			wlr_log(WLR_ERROR,
 				"%s:%zu: key=value outside a recognized [section]",
 				path, line_no);
@@ -1135,6 +1255,20 @@ bool comp_config_load(const char *path, struct comp_config **cfg_out)
 				wlr_log(WLR_ERROR, "%s:%zu: unknown decoration_rule key '%s'", path, line_no, line);
 				ok = false;
 			}
+		} else if (in_input_map) {
+			if (!strcasecmp(line, "match") || !strcasecmp(line, "name")) {
+				free(cur_imap.match_pat);
+				cur_imap.match_pat = xstrdup(eq);
+			} else if (!strcasecmp(line, "output")) {
+				free(cur_imap.output_name);
+				cur_imap.output_name = xstrdup(eq);
+			} else if (!strcasecmp(line, "type")) {
+				free(cur_imap.type_str);
+				cur_imap.type_str = xstrdup(eq);
+			} else {
+				wlr_log(WLR_ERROR, "%s:%zu: unknown input_map key '%s'", path, line_no, line);
+				ok = false;
+			}
 		}
 		if (!ok) {
 			break;
@@ -1151,9 +1285,13 @@ bool comp_config_load(const char *path, struct comp_config **cfg_out)
 	if (ok && in_decoration_rule) {
 		ok = flush_decoration_rule(cfg, &cur_dec, line_no);
 	}
+	if (ok && in_input_map) {
+		ok = flush_input_map_rule(cfg, &cur_imap, line_no, path);
+	}
 	keybind_clear(&cur);
 	tile_rule_parse_reset(&cur_tile);
 	decoration_rule_parse_reset(&cur_dec);
+	input_map_parse_reset(&cur_imap);
 
 	if (!ok) {
 		wlr_log(WLR_ERROR, "Failed to parse config %s", path);

@@ -11,6 +11,19 @@ struct comp_server;
 
 void comp_config_sync_shell_env(struct comp_server *server);
 
+/** Bitmask for comp_input_map_rule.types (which wlr device kinds a rule applies to). */
+#define COMP_INPUT_MAP_TYPE_TOUCH (1u << 0)
+#define COMP_INPUT_MAP_TYPE_TABLET (1u << 1)
+#define COMP_INPUT_MAP_TYPE_POINTER (1u << 2)
+
+/** Map a touch / tablet / pointer device to one output by connector name (see [input_map]). */
+struct comp_input_map_rule {
+	regex_t name_re;
+	bool have_name;
+	uint32_t types;
+	char *output_name;
+};
+
 enum comp_keybind_action {
 	COMP_KEYBIND_NONE = 0,
 	COMP_KEYBIND_QUIT,
@@ -82,6 +95,8 @@ struct comp_config {
 	size_t n_tile_rules;
 	struct comp_decoration_rule *decoration_rules;
 	size_t n_decoration_rules;
+	struct comp_input_map_rule *input_map_rules;
+	size_t n_input_map_rules;
 	/** When no `[decoration_rule]` matches, use this for tile/scroll (default true = hide client title bars). */
 	bool decoration_strip_default;
 	/** Optional `sh -c` snippets from `[hooks]` (trusted like exec). */

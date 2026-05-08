@@ -32,6 +32,9 @@ struct wlr_foreign_toplevel_manager_v1;
 struct wlr_foreign_toplevel_handle_v1;
 struct wlr_xdg_decoration_manager_v1;
 struct wlr_xdg_toplevel_decoration_v1;
+struct wlr_tablet_manager_v2;
+struct wlr_tablet;
+struct wlr_tablet_v2_tablet;
 
 struct comp_config;
 
@@ -49,6 +52,7 @@ void comp_config_sync_layout_env(enum comp_layout layout);
 enum comp_grab {
 	COMP_GRAB_NONE,
 	COMP_GRAB_MOVE,
+	COMP_GRAB_RESIZE,
 };
 
 struct comp_server;
@@ -119,6 +123,24 @@ struct comp_keyboard {
 	struct wlr_input_device *dev;
 };
 
+/** Tablet device with tablet-v2 protocol object (one per WLR_INPUT_DEVICE_TABLET). */
+struct comp_tablet {
+	struct wl_list link;
+	struct comp_server *server;
+	struct wlr_input_device *dev;
+	struct wlr_tablet *wlr_tablet;
+	struct wlr_tablet_v2_tablet *v2_tablet;
+	struct wl_listener destroy;
+};
+
+/** Cursor-attached non-keyboard device for applying `[input_map]` on hotplug / reload. */
+struct comp_tracked_input {
+	struct wl_list link;
+	struct comp_server *server;
+	struct wlr_input_device *dev;
+	struct wl_listener destroy;
+};
+
 struct comp_server {
 	struct wl_display *wl_display;
 	struct wlr_backend *backend;
@@ -143,6 +165,9 @@ struct comp_server {
 	struct wl_listener layer_shell_new_surface;
 	struct wlr_cursor *cursor;
 	struct wlr_xcursor_manager *cursor_mgr;
+	struct wlr_tablet_manager_v2 *tablet_manager;
+	struct wl_list tablets;
+	struct wl_list tracked_inputs;
 	struct wlr_seat *seat;
 	struct wl_listener new_output;
 	struct wl_listener new_input;
@@ -156,6 +181,15 @@ struct comp_server {
 	struct wl_listener cursor_frame;
 	struct wl_listener seat_request_cursor;
 	struct wl_listener seat_request_set_selection;
+	struct wl_listener cursor_touch_down;
+	struct wl_listener cursor_touch_up;
+	struct wl_listener cursor_touch_motion;
+	struct wl_listener cursor_touch_cancel;
+	struct wl_listener cursor_touch_frame;
+	struct wl_listener cursor_tablet_tool_axis;
+	struct wl_listener cursor_tablet_tool_proximity;
+	struct wl_listener cursor_tablet_tool_tip;
+	struct wl_listener cursor_tablet_tool_button;
 	struct wl_list outputs;
 	struct wl_list toplevels;
 	enum comp_layout layout;
@@ -165,7 +199,12 @@ struct comp_server {
 	struct comp_toplevel *grabbed_toplevel;
 	double grab_cursor_x, grab_cursor_y;
 	int grab_view_x, grab_view_y;
+	int grab_view_width, grab_view_height;
+	uint32_t resize_edges;
 	bool swallow_left_release;
+	/** Touch→pointer emulation: `touch_pointer_emu` is true for the active `touch_pointer_emu_id` contact. */
+	bool touch_pointer_emu;
+	int32_t touch_pointer_emu_id;
 	struct comp_config *config;
 	/** Path used for the last successful load; used by `reload config` IPC. */
 	char *config_path;
@@ -178,6 +217,9 @@ struct comp_server {
 };
 
 bool server_init(struct comp_server *server);
+
+/** Apply `[input_map]` rules to cursor-attached devices (call after new input/output and config reload). */
+void server_apply_input_device_maps(struct comp_server *server);
 
 void server_set_layout(struct comp_server *server, enum comp_layout layout);
 void server_toggle_layout(struct comp_server *server);

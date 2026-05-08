@@ -51,6 +51,20 @@ ext_workspace_private_c = custom_target(
   command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
 )
 
+tablet_v2_xml = wayland_protocols.get_variable('pkgdatadir') / 'stable/tablet/tablet-v2.xml'
+tablet_v2_server_h = custom_target(
+  'tablet-v2-protocol-h',
+  output: 'tablet-v2-protocol.h',
+  input: tablet_v2_xml,
+  command: [wayland_scanner, 'server-header', '@INPUT@', '@OUTPUT@'],
+)
+tablet_v2_private_c = custom_target(
+  'tablet-v2-protocol-c',
+  output: 'tablet-v2-protocol.c',
+  input: tablet_v2_xml,
+  command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
+)
+
 executable(
   'stackcomp',
   'src/main.c',
@@ -60,6 +74,8 @@ executable(
   layer_shell_server_h,
   ext_workspace_server_h,
   ext_workspace_private_c,
+  tablet_v2_server_h,
+  tablet_v2_private_c,
   dependencies: [wlroots, wayland_server, xkbcommon, m_dep],
   install: true,
 )
