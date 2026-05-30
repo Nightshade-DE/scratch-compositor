@@ -4595,6 +4595,39 @@ static void server_finish(struct comp_server *server)
 	server->config_path = NULL;
 }
 
+/** Print command-line usage and available startup/IPC flags. */
+static void print_usage(const char *argv0)
+{
+	const char *prog = (argv0 && argv0[0]) ? argv0 : "stackcomp";
+	printf("Usage: %s [options]\n", prog);
+	printf("\n");
+	printf("General:\n");
+	printf("  -h, --help                 Show this help and exit\n");
+	printf("  -c, --config PATH          Load config from PATH\n");
+	printf("\n");
+	printf("Logging:\n");
+	printf("  --log-level LEVEL          silent|error|info|debug\n");
+	printf("  --quiet                    Shortcut for --log-level error\n");
+	printf("  --verbose                  Shortcut for --log-level debug\n");
+	printf("  --log-file PATH            Append logs to PATH\n");
+	printf("\n");
+	printf("Crash handling:\n");
+	printf("  --crash-log PATH           Append crash markers to PATH\n");
+	printf("  --no-crash-handler         Disable crash handler installation\n");
+	printf("\n");
+	printf("Runtime control (IPC-aware):\n");
+	printf("  --layout stack|tile|scroll\n");
+	printf("  --scroll                   Same as --layout scroll\n");
+	printf("  --tile-move ARG            prev|next|left|right|first|last|N\n");
+	printf("  --tile-grid ARG [COUNT]    up|down|left|right|top|bottom or signed N\n");
+	printf("  --scroll-move ARG          prev|next|left|right|N\n");
+	printf("  --workspace ARG            1..9|next|prev\n");
+	printf("  --workspace-move N         Move focused window to workspace N\n");
+	printf("  --reload-config            Send reload request to running compositor\n");
+	printf("  --ipc                      Keep compatibility; IPC is default-on\n");
+	printf("  --no-ipc                   Disable IPC socket for this instance\n");
+}
+
 /** Process CLI/IPC startup flow, initialize compositor, and run Wayland event loop. */
 int main(int argc, char **argv)
 {
@@ -4608,6 +4641,11 @@ int main(int argc, char **argv)
 	 */
 	for (int i = 1; i < argc; i++)
 	{
+		if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help"))
+		{
+			print_usage(argv[0]);
+			return 0;
+		}
 		if (!strcmp(argv[i], "--verbose"))
 		{
 			startup_log_level = WLR_DEBUG;
