@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build and unit tests
+    runs-on: [self-hosted, linux]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: meson setup build --reconfigure
+
+      - name: Compile
+        run: meson compile -C build
+
+      - name: Run tests
+        run: meson test -C build --print-errorlogs

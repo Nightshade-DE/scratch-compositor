@@ -39,6 +39,17 @@ Run:
 ./build/stackcomp
 ```
 
+## Tests
+
+Run automated tests locally with Meson:
+
+```bash
+meson setup build --reconfigure
+meson test -C build --print-errorlogs
+```
+
+Current automated coverage includes config parser and rule validation checks.
+
 ## Repository Structure
 
 - `src/`: compositor source code

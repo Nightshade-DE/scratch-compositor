@@ -90,6 +90,16 @@ executable(
   install: true,
 )
 
+config_test = executable(
+  'stackcomp-test-config',
+  'tests/test_config.c',
+  'src/config.c',
+  dependencies: [wlroots, pixman, wayland_server, xkbcommon, m_dep],
+  include_directories: include_directories('src'),
+)
+
+test('config', config_test)
+
 install_data(
   files('data/stackcomp.desktop'),
   install_dir: get_option('datadir') / 'wayland-sessions',

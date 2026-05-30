@@ -79,6 +79,15 @@ meson setup build && meson compile -C build
 
 Nested (Wayland): `WAYLAND_DISPLAY=wayland-1 ./build/stackcomp`
 
+Automated tests:
+
+```bash
+meson setup build --reconfigure
+meson test -C build --print-errorlogs
+```
+
+CI workflow lives at `.github/workflows/ci.yml` and runs the same configure/build/test sequence.
+
 **Build deps:** wlroots 0.19, `wayland-server`, `wayland-protocols` (for `xdg-shell` codegen), `xkbcommon`, plus wlroots’ normal graphics stack (DRM, libinput, etc.) for a DRM session.
 
 Runtime is the same as other wlroots compositors: prefer a **TTY login** or a **nested** Wayland/X11 session for first tests.
