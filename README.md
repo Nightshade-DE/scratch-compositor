@@ -103,6 +103,7 @@ Current automated coverage includes config parser and rule validation checks.
 - `config/`: helper scripts and sample runtime config
 - `testing/`: local test assets
 - `protocols/`: vendored XML protocol files used for code generation
+- `DEVFAQ.md`: developer troubleshooting FAQ (logs, runtime behavior, common pitfalls)
 
 ## Runtime Notes
 
