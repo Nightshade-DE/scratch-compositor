@@ -4412,6 +4412,24 @@ static void seat_request_set_selection(struct wl_listener *listener, void *data)
 	wlr_seat_set_selection(server->seat, ev->source, ev->serial);
 }
 
+/** Backend destroy callback: terminate the Wayland event loop on backend teardown. */
+static void server_backend_destroy(struct wl_listener *listener, void *data)
+{
+	(void)data;
+	struct comp_server *server = wl_container_of(listener, server, backend_destroy);
+	if (!server->wl_display)
+	{
+		return;
+	}
+	/*
+	 * Nested backends (e.g. X11) can tear down from outside the Wayland loop
+	 * when the host window is closed. Terminating here ensures wl_display_run()
+	 * exits and the compositor process does not linger in the background.
+	 */
+	wlr_log(WLR_INFO, "Backend destroyed, terminating display loop");
+	wl_display_terminate(server->wl_display);
+}
+
 /** Initialize wlroots objects, protocol globals, listeners, and compositor runtime state. */
 bool server_init(struct comp_server *server)
 {
@@ -4493,6 +4511,9 @@ bool server_init(struct comp_server *server)
 		wlr_log(WLR_ERROR, "Failed to create wlr_foreign_toplevel_manager_v1");
 		return false;
 	}
+	/* Keep backend lifetime wired to compositor shutdown. */
+	server->backend_destroy.notify = server_backend_destroy;
+	wl_signal_add(&server->backend->events.destroy, &server->backend_destroy);
 	server->new_output.notify = server_new_output;
 	wl_signal_add(&server->backend->events.new_output, &server->new_output);
 	server->new_input.notify = server_new_input;
