@@ -102,3 +102,18 @@ Interpretation:
 - It is a common side effect of closing a terminal window with active child processes.
 
 Investigate further only if you also see repeated compositor-side protocol errors or crashes.
+
+## 8) Closing the compositor via X button logs `Unhandled X11 event: DestroyNotify (17)`
+
+This is usually expected in nested X11 sessions during shutdown.
+
+What happens:
+
+- Clicking the window close button triggers X11 teardown for the compositor window.
+- During shutdown, a `DestroyNotify` event can still arrive while backend event handling is winding down.
+- wlroots logs this as a debug line: `Unhandled X11 event: DestroyNotify (17)`.
+
+Interpretation:
+
+- If the compositor exits cleanly and no follow-up errors/crashes appear, this is generally harmless.
+- Treat it as suspicious only when it repeats during normal runtime or is followed by error/fatal logs.
