@@ -140,6 +140,31 @@ act -j workflow-sanity
 act -j build-and-test
 ```
 
+Progress expectations:
+
+- The first `act` run usually downloads one or more large Docker images.
+- During image download/build phases, output can pause briefly and look stuck.
+- This is normal as long as Docker activity continues.
+
+Useful commands while waiting (second terminal):
+
+```bash
+docker ps
+docker images | grep catthehacker
+```
+
+More verbose output from act:
+
+```bash
+act -j workflow-sanity -v
+```
+
+Optional pre-pull to reduce waiting time in future runs:
+
+```bash
+docker pull catthehacker/ubuntu:act-latest
+```
+
 Note:
 
 - build-and-test still needs an act image/environment with compatible wlroots

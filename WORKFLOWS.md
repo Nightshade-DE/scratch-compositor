@@ -78,6 +78,30 @@ act -j workflow-sanity
 act -j build-and-test
 ```
 
+Progress note (important for first run):
+
+- On first execution, act downloads large Docker images. This can take several
+   minutes depending on network speed and may look idle for short periods.
+- For more live output, use verbose mode:
+
+```bash
+act -j workflow-sanity -v
+```
+
+- You can pre-pull the base image to make later runs feel faster:
+
+```bash
+docker pull catthehacker/ubuntu:act-latest
+```
+
+- If you want to verify that work is still ongoing, check running container/pull
+   activity in a second terminal:
+
+```bash
+docker ps
+docker images | grep catthehacker
+```
+
 Important: the build-and-test job still needs a container image/environment
 that provides compatible Meson, wlroots pkg-config metadata, and Wayland
 tooling.
