@@ -132,3 +132,18 @@ Interpretation:
 
 - If stackcomp exits and no assertions/crashes follow, this message is expected and not treated as a functional failure.
 - Investigate only if the message appears repeatedly during normal runtime or is followed by new fatal errors.
+
+## 10) Nested shutdown logs `(EE) failed to read Wayland events: Broken pipe`
+
+This can appear during a clean quit path in nested sessions and is currently treated as expected shutdown noise.
+
+Context:
+
+- A quit action triggers orderly compositor shutdown.
+- While the Wayland side is already closing, Xwayland can still attempt a final event read.
+- That race during teardown can emit `(EE) failed to read Wayland events: Broken pipe` even when exit status is successful.
+
+Interpretation:
+
+- If stackcomp exits with code 0 and no follow-up fatal signal/assertion appears, this line is considered harmless.
+- Investigate further only if it occurs repeatedly during normal runtime or is followed by new crashes.

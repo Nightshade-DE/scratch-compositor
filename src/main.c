@@ -1151,8 +1151,7 @@ static void output_destroy(struct wl_listener *listener, void *data)
 		 * Wayland connection during the subsequent display-loop termination.
 		 */
 		server_destroy_xwayland(server);
-		wlr_log(WLR_INFO, "Last output removed in nested backend, terminating display loop");
-		wl_display_terminate(server->wl_display);
+		server_request_terminate(server, "Last output removed in nested backend, terminating display loop");
 	}
 	free(output);
 }
@@ -3367,6 +3366,12 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
 	keyboard_key_dispatch_depth++;
 
 	struct comp_keyboard *kbd = wl_container_of(listener, kbd, key);
+	/* During shutdown wlroots may emit late key events; avoid seat access then. */
+	if (!kbd->server || !kbd->server->seat || kbd->server->display_terminate_requested)
+	{
+		keyboard_key_dispatch_depth--;
+		return;
+	}
 	struct wlr_keyboard_key_event *event = data;
 	struct wlr_keyboard *wlr_kbd = wlr_keyboard_from_input_device(kbd->dev);
 
@@ -3417,6 +3422,11 @@ static void keyboard_handle_modifiers(struct wl_listener *listener, void *data)
 {
 	(void)data;
 	struct comp_keyboard *kbd = wl_container_of(listener, kbd, modifiers);
+	/* Skip modifier propagation once shutdown has started. */
+	if (!kbd->server || !kbd->server->seat || kbd->server->display_terminate_requested)
+	{
+		return;
+	}
 	struct wlr_keyboard *wlr_kbd = wlr_keyboard_from_input_device(kbd->dev);
 	wlr_seat_set_keyboard(kbd->server->seat, wlr_kbd);
 	wlr_seat_keyboard_notify_modifiers(kbd->server->seat, &wlr_kbd->modifiers);
@@ -3528,6 +3538,22 @@ static void track_input_device(struct comp_server *server, struct wlr_input_devi
 	wl_list_insert(&server->tracked_inputs, &ti->link);
 	server_update_seat_capabilities(server);
 	server_apply_input_device_maps(server);
+}
+
+/** Drop tracked-input wrappers before wlroots object destruction to avoid late destroy callbacks. */
+static void server_clear_tracked_inputs(struct comp_server *server)
+{
+	if (!server)
+	{
+		return;
+	}
+	struct comp_tracked_input *ti, *tmp;
+	wl_list_for_each_safe(ti, tmp, &server->tracked_inputs, link)
+	{
+		detach_listener_if_linked(&ti->destroy);
+		wl_list_remove(&ti->link);
+		free(ti);
+	}
 }
 
 /** Recompute wl_seat capability bitset from currently tracked devices. */
@@ -4542,8 +4568,7 @@ static void server_backend_destroy(struct wl_listener *listener, void *data)
 	 * when the host window is closed. Terminating here ensures wl_display_run()
 	 * exits and the compositor process does not linger in the background.
 	 */
-	wlr_log(WLR_INFO, "Backend destroyed, terminating display loop");
-	wl_display_terminate(server->wl_display);
+	server_request_terminate(server, "Backend destroyed, terminating display loop");
 }
 
 /** Initialize wlroots objects, protocol globals, listeners, and compositor runtime state. */
@@ -4749,6 +4774,12 @@ static void server_finish(struct comp_server *server)
 	{
 		comp_config_run_shutdown(server->config);
 	}
+	/*
+	 * Input devices may be destroyed after wl_seat teardown during wl_display_destroy().
+	 * Remove tracked-input destroy listeners now so they cannot call seat capability updates
+	 * on partially destroyed seat/client objects.
+	 */
+	server_clear_tracked_inputs(server);
 	/*
 	 * Prevent wlroots destroy-time assertions by removing our listeners from
 	 * protocol/backend listener lists before the display/global teardown starts.

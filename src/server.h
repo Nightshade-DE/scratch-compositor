@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <wayland-server-core.h>
+#include <wlr/util/log.h>
 
 struct wlr_allocator;
 struct wlr_backend;
@@ -47,7 +48,8 @@ struct comp_config;
 /** Number of virtual workspaces (indices 0 .. COUNT-1; keybinds/IPC use 1..COUNT). */
 #define COMP_WORKSPACE_COUNT 9
 
-enum comp_layout {
+enum comp_layout
+{
 	COMP_LAYOUT_STACK = 0,
 	COMP_LAYOUT_TILE,
 	COMP_LAYOUT_SCROLL,
@@ -55,7 +57,8 @@ enum comp_layout {
 
 void comp_config_sync_layout_env(enum comp_layout layout);
 
-enum comp_grab {
+enum comp_grab
+{
 	COMP_GRAB_NONE,
 	COMP_GRAB_MOVE,
 	COMP_GRAB_RESIZE,
@@ -63,7 +66,8 @@ enum comp_grab {
 
 struct comp_server;
 
-struct comp_output {
+struct comp_output
+{
 	struct wl_list link;
 	struct comp_server *server;
 	struct wlr_output *wlr_output;
@@ -78,7 +82,8 @@ struct comp_output {
 };
 
 /** One zwlr_layer_surface_v1 client; lives on server->layers. */
-struct comp_layer {
+struct comp_layer
+{
 	struct wl_list link;
 	struct comp_server *server;
 	struct wlr_layer_surface_v1 *layer_surface;
@@ -90,7 +95,8 @@ struct comp_layer {
 	struct wl_listener new_popup;
 };
 
-struct comp_toplevel {
+struct comp_toplevel
+{
 	struct wl_list link;
 	struct comp_server *server;
 	/** Exactly one of `xdg_toplevel` or `xwayland_surface` is non-NULL. */
@@ -132,7 +138,8 @@ struct comp_toplevel {
 	struct wl_listener xdg_decoration_request_mode;
 };
 
-struct comp_keyboard {
+struct comp_keyboard
+{
 	struct wl_listener destroy;
 	struct wl_listener key;
 	struct wl_listener modifiers;
@@ -141,7 +148,8 @@ struct comp_keyboard {
 };
 
 /** Tablet device with tablet-v2 protocol object (one per WLR_INPUT_DEVICE_TABLET). */
-struct comp_tablet {
+struct comp_tablet
+{
 	struct wl_list link;
 	struct comp_server *server;
 	struct wlr_input_device *dev;
@@ -151,14 +159,16 @@ struct comp_tablet {
 };
 
 /** Cursor-attached non-keyboard device for applying `[input_map]` on hotplug / reload. */
-struct comp_tracked_input {
+struct comp_tracked_input
+{
 	struct wl_list link;
 	struct comp_server *server;
 	struct wlr_input_device *dev;
 	struct wl_listener destroy;
 };
 
-struct comp_server {
+struct comp_server
+{
 	struct wl_display *wl_display;
 	struct wlr_backend *backend;
 	struct wlr_renderer *renderer;
@@ -238,12 +248,34 @@ struct comp_server {
 	/** Path used for the last successful load; used by `reload config` IPC. */
 	char *config_path;
 	bool ipc_enabled;
+	/** True after the first display-loop terminate request to avoid duplicate terminate calls. */
+	bool display_terminate_requested;
 	struct wl_event_source *ipc_event_source;
 	int ipc_listen_fd;
 	char ipc_socket_path[108];
 	/** CLOCK_MONOTONIC ns; used for layout position easing in tile/scroll. */
 	uint64_t layout_anim_last_ns;
 };
+
+/** Request wl_display_run() shutdown exactly once (safe against duplicate callers). */
+static inline void server_request_terminate(struct comp_server *server, const char *reason)
+{
+	/* Ignore repeated terminate requests from overlapping quit/teardown callbacks. */
+	if (!server || !server->wl_display)
+	{
+		return;
+	}
+	if (server->display_terminate_requested)
+	{
+		return;
+	}
+	server->display_terminate_requested = true;
+	if (reason && reason[0])
+	{
+		wlr_log(WLR_INFO, "%s", reason);
+	}
+	wl_display_terminate(server->wl_display);
+}
 
 bool server_init(struct comp_server *server);
 

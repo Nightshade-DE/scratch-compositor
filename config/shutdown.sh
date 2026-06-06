@@ -19,8 +19,9 @@
 ################################################################################
 
 # Activate Helper functions for logging and launching services
+# shellcheck disable=SC2034
 CURRENT_LOG_FILE="${STACKCOMP_SHUTDOWN_LOG_FILE:?STACKCOMP_SHUTDOWN_LOG_FILE is not set}"
-source "$HOME/scratch-compositor/scripts/shell-helpers.sh"
+. "$COMP_ROOT_DIR/scripts/shell-helpers.sh"
 
 log_shutdown INFO "Starting session cleanup"
 
