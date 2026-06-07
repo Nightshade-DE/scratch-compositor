@@ -20,3 +20,6 @@ copilot-instructions.md
 
 # Vscode folder
 .vscode/
+
+# Local scratch notes/log extracts
+*.txt

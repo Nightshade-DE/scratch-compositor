@@ -90,6 +90,17 @@ struct comp_popup
 	struct wl_listener reposition;
 };
 
+/** Tracks one xdg_popup attached to a layer-surface subtree; freed on popup destroy. */
+struct comp_layer_popup
+{
+	struct comp_layer *layer;
+	struct wlr_xdg_popup *wlr_popup;
+	struct wl_listener destroy;
+	struct wl_listener new_popup;
+	struct wl_listener commit;
+	struct wl_listener reposition;
+};
+
 static void focus_toplevel(struct comp_server *server, struct comp_toplevel *toplevel);
 static struct wlr_output *primary_wlr_output(struct comp_server *server);
 static void process_cursor_motion(struct comp_server *server, uint32_t time_msec);
@@ -897,27 +908,22 @@ static void popup_unconstrain(struct comp_popup *popup)
 		.width = usable.width,
 		.height = usable.height,
 	};
-	if (popup->wlr_popup->base->initialized)
-	{
-		wlr_xdg_popup_unconstrain_from_box(popup->wlr_popup, &box);
-	}
-	else if (xdg_debug_logs_enabled)
-	{
-		wlr_log(WLR_INFO, "xdgdbg:toplevel-popup skip unconstrain before initialized");
-	}
+	/*
+	 * For xdg_popup, unconstrain drives configure emission. Gating on initialized
+	 * can suppress the initial configure and later trigger protocol errors when
+	 * the client commits a buffer.
+	 */
+	wlr_xdg_popup_unconstrain_from_box(popup->wlr_popup, &box);
 }
 
-/** First popup commit callback: unconstrain once base is initialized. */
+/** First popup commit callback: force one unconstrain pass, then detach listener. */
 static void popup_handle_commit(struct wl_listener *listener, void *data)
 {
 	(void)data;
 	struct comp_popup *popup = wl_container_of(listener, popup, commit);
-	if (popup->wlr_popup->base->initial_commit)
-	{
-		popup_unconstrain(popup);
-		wl_list_remove(&popup->commit.link);
-		popup->commit.notify = NULL;
-	}
+	popup_unconstrain(popup);
+	wl_list_remove(&popup->commit.link);
+	popup->commit.notify = NULL;
 }
 
 /** Popup reposition callback: recompute unconstrain box. */
@@ -929,6 +935,69 @@ static void popup_handle_reposition(struct wl_listener *listener, void *data)
 }
 
 static void popup_create(struct comp_toplevel *view, struct wlr_xdg_popup *wlr_popup);
+static void layer_popup_create(struct comp_layer *layer, struct wlr_xdg_popup *wlr_popup);
+
+/** Unconstrain a layer popup against the current output workarea of its layer parent. */
+static void layer_popup_unconstrain(struct comp_layer_popup *popup)
+{
+	if (!popup || !popup->layer || !popup->wlr_popup || !popup->layer->layer_surface)
+	{
+		return;
+	}
+	struct comp_output *out = comp_output_from_wlr(popup->layer->server, popup->layer->layer_surface->output);
+	struct wlr_box box;
+	if (out)
+	{
+		box = out->layer_workarea;
+	}
+	else
+	{
+		wlr_output_layout_get_box(popup->layer->server->output_layout,
+								  popup->layer->layer_surface->output, &box);
+	}
+	/* Same rationale as toplevel popups: do not gate away initial configure. */
+	wlr_xdg_popup_unconstrain_from_box(popup->wlr_popup, &box);
+}
+
+/** First layer popup commit callback: force one unconstrain pass, then detach listener. */
+static void layer_popup_handle_commit(struct wl_listener *listener, void *data)
+{
+	(void)data;
+	struct comp_layer_popup *popup = wl_container_of(listener, popup, commit);
+	layer_popup_unconstrain(popup);
+	wl_list_remove(&popup->commit.link);
+	popup->commit.notify = NULL;
+}
+
+/** Layer popup reposition callback: recompute unconstrain box. */
+static void layer_popup_handle_reposition(struct wl_listener *listener, void *data)
+{
+	(void)data;
+	struct comp_layer_popup *popup = wl_container_of(listener, popup, reposition);
+	layer_popup_unconstrain(popup);
+}
+
+/** Nested layer popup callback: create child popup scene node. */
+static void layer_popup_handle_new_popup(struct wl_listener *listener, void *data)
+{
+	struct comp_layer_popup *popup = wl_container_of(listener, popup, new_popup);
+	layer_popup_create(popup->layer, data);
+}
+
+/** Layer popup destroy callback: detach listeners and free popup tracking state. */
+static void layer_popup_handle_destroy(struct wl_listener *listener, void *data)
+{
+	(void)data;
+	struct comp_layer_popup *popup = wl_container_of(listener, popup, destroy);
+	wl_list_remove(&popup->destroy.link);
+	wl_list_remove(&popup->new_popup.link);
+	if (popup->commit.notify)
+	{
+		wl_list_remove(&popup->commit.link);
+	}
+	wl_list_remove(&popup->reposition.link);
+	free(popup);
+}
 
 /** Nested popup callback: create child popup scene node. */
 static void popup_handle_new_popup(struct wl_listener *listener, void *data)
@@ -1001,8 +1070,56 @@ static void popup_create(struct comp_toplevel *view, struct wlr_xdg_popup *wlr_p
 	wl_signal_add(&wlr_popup->base->surface->events.commit, &popup->commit);
 	popup->reposition.notify = popup_handle_reposition;
 	wl_signal_add(&wlr_popup->events.reposition, &popup->reposition);
+	/* Defer unconstrain/configure to first popup commit to avoid early-lifecycle races. */
+}
 
-	popup_unconstrain(popup);
+/** Create scene integration and listeners for one layer-surface xdg_popup subtree. */
+static void layer_popup_create(struct comp_layer *layer, struct wlr_xdg_popup *wlr_popup)
+{
+	struct wlr_xdg_surface *parent_xdg = wlr_xdg_surface_try_from_wlr_surface(wlr_popup->parent);
+
+	struct comp_layer_popup *popup = calloc(1, sizeof(*popup));
+	if (!popup)
+	{
+		return;
+	}
+	popup->layer = layer;
+	popup->wlr_popup = wlr_popup;
+
+	struct wlr_scene_tree *parent_tree;
+	if (parent_xdg && parent_xdg->role == WLR_XDG_SURFACE_ROLE_POPUP)
+	{
+		parent_tree = parent_xdg->surface->data;
+		if (!parent_tree)
+		{
+			free(popup);
+			return;
+		}
+	}
+	else
+	{
+		/* Top-level layer popups typically have no xdg parent surface. */
+		parent_tree = layer->scene_layer->tree;
+	}
+
+	struct wlr_scene_tree *tree = wlr_scene_xdg_surface_create(parent_tree, wlr_popup->base);
+	if (!tree)
+	{
+		free(popup);
+		return;
+	}
+	wlr_popup->base->surface->data = tree;
+	wlr_scene_node_raise_to_top(&tree->node);
+
+	popup->destroy.notify = layer_popup_handle_destroy;
+	wl_signal_add(&wlr_popup->events.destroy, &popup->destroy);
+	popup->new_popup.notify = layer_popup_handle_new_popup;
+	wl_signal_add(&wlr_popup->base->events.new_popup, &popup->new_popup);
+	popup->commit.notify = layer_popup_handle_commit;
+	wl_signal_add(&wlr_popup->base->surface->events.commit, &popup->commit);
+	popup->reposition.notify = layer_popup_handle_reposition;
+	wl_signal_add(&wlr_popup->events.reposition, &popup->reposition);
+	/* Defer unconstrain/configure to first popup commit to avoid early-lifecycle races. */
 }
 
 /** toplevel new_popup callback: attach popup to this toplevel. */
@@ -1016,27 +1133,7 @@ static void toplevel_handle_new_popup(struct wl_listener *listener, void *data)
 static void comp_layer_new_popup(struct wl_listener *listener, void *data)
 {
 	struct comp_layer *layer = wl_container_of(listener, layer, new_popup);
-	struct wlr_xdg_popup *popup = data;
-	struct comp_output *out = comp_output_from_wlr(layer->server, layer->layer_surface->output);
-	struct wlr_box box;
-	if (out)
-	{
-		box = out->layer_workarea;
-	}
-	else
-	{
-		wlr_output_layout_get_box(layer->server->output_layout, layer->layer_surface->output, &box);
-	}
-	/* wlroots 0.19: unconstrain may schedule configure; popup base must be initialized. */
-	if (popup->base && popup->base->initialized)
-	{
-		wlr_xdg_popup_unconstrain_from_box(popup, &box);
-	}
-	else if (xdg_debug_logs_enabled)
-	{
-		wlr_log(WLR_INFO, "xdgdbg:layer-popup skip unconstrain before initialized");
-	}
-	wlr_scene_xdg_surface_create(layer->scene_layer->tree, popup->base);
+	layer_popup_create(layer, data);
 }
 
 /** layer-shell destroy callback: remove listeners/list entry and free wrapper. */
@@ -1656,8 +1753,8 @@ static void toplevel_destroy(struct wl_listener *listener, void *data)
 	struct comp_toplevel *view = wl_container_of(listener, view, destroy);
 	if (view->xdg_decoration)
 	{
-		wl_list_remove(&view->xdg_decoration_destroy.link);
-		wl_list_remove(&view->xdg_decoration_request_mode.link);
+		detach_listener_if_linked(&view->xdg_decoration_destroy);
+		detach_listener_if_linked(&view->xdg_decoration_request_mode);
 		view->xdg_decoration = NULL;
 	}
 	if (view->xdg_toplevel)
@@ -1667,34 +1764,34 @@ static void toplevel_destroy(struct wl_listener *listener, void *data)
 		{
 			wlr_xdg_popup_destroy(popup);
 		}
-		wl_list_remove(&view->map.link);
-		wl_list_remove(&view->unmap.link);
-		wl_list_remove(&view->commit.link);
-		wl_list_remove(&view->request_move.link);
-		wl_list_remove(&view->request_resize.link);
-		wl_list_remove(&view->set_title.link);
-		wl_list_remove(&view->set_app_id.link);
-		wl_list_remove(&view->new_popup.link);
+		detach_listener_if_linked(&view->map);
+		detach_listener_if_linked(&view->unmap);
+		detach_listener_if_linked(&view->commit);
+		detach_listener_if_linked(&view->request_move);
+		detach_listener_if_linked(&view->request_resize);
+		detach_listener_if_linked(&view->set_title);
+		detach_listener_if_linked(&view->set_app_id);
+		detach_listener_if_linked(&view->new_popup);
 	}
 	else if (view->xwayland_surface)
 	{
-		wl_list_remove(&view->xwayland_associate.link);
-		wl_list_remove(&view->xwayland_dissociate.link);
-		wl_list_remove(&view->xwayland_map_request.link);
-		wl_list_remove(&view->xwayland_request_configure.link);
+		detach_listener_if_linked(&view->xwayland_associate);
+		detach_listener_if_linked(&view->xwayland_dissociate);
+		detach_listener_if_linked(&view->xwayland_map_request);
+		detach_listener_if_linked(&view->xwayland_request_configure);
 		if (view->scene_tree)
 		{
-			wl_list_remove(&view->map.link);
-			wl_list_remove(&view->unmap.link);
-			wl_list_remove(&view->request_move.link);
-			wl_list_remove(&view->request_resize.link);
-			wl_list_remove(&view->set_title.link);
-			wl_list_remove(&view->set_class.link);
+			detach_listener_if_linked(&view->map);
+			detach_listener_if_linked(&view->unmap);
+			detach_listener_if_linked(&view->request_move);
+			detach_listener_if_linked(&view->request_resize);
+			detach_listener_if_linked(&view->set_title);
+			detach_listener_if_linked(&view->set_class);
 			wlr_scene_node_destroy(&view->scene_tree->node);
 			view->scene_tree = NULL;
 		}
 	}
-	wl_list_remove(&view->destroy.link);
+	detach_listener_if_linked(&view->destroy);
 	if (view->listed)
 	{
 		wl_list_remove(&view->link);
@@ -1702,8 +1799,8 @@ static void toplevel_destroy(struct wl_listener *listener, void *data)
 	}
 	if (view->foreign_toplevel)
 	{
-		wl_list_remove(&view->foreign_request_activate.link);
-		wl_list_remove(&view->foreign_request_close.link);
+		detach_listener_if_linked(&view->foreign_request_activate);
+		detach_listener_if_linked(&view->foreign_request_close);
 		wlr_foreign_toplevel_handle_v1_destroy(view->foreign_toplevel);
 		view->foreign_toplevel = NULL;
 	}
