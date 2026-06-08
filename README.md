@@ -1,6 +1,5 @@
-# stackcomp
-
-A wlroots-based Wayland compositor with stack, tile, and scroll layouts.
+# Stackcomp (WIP Name)
+A stacking, tiling, and scrolling hybrid compositor built from stratch with WL-Roots
 
 ## Current Features
 
@@ -10,6 +9,10 @@ A wlroots-based Wayland compositor with stack, tile, and scroll layouts.
 - Tiling rules (`[tile_rule]`) and decoration rules (`[decoration_rule]`) by regex.
 - Layer-shell workarea handling via exclusive zones.
 - Optional Xwayland support for X11 clients.
+
+# Current repo structure
+* \[config]: defult config for the compositor
+* \[testing]: testing files for the compositor
 
 ## Current Protocol Support
 
@@ -23,6 +26,19 @@ A wlroots-based Wayland compositor with stack, tile, and scroll layouts.
 - `zwp_tablet_manager_v2`
 
 See `PROTOCOLS.md` for the exact matrix of implemented and missing globals.
+
+# Current repo structure
+* \[config]: defult config for the compositor
+* \[testing]: testing files for the compositor
+
+# Deps
+- `xwayland-satellite` — X11 apps (ATLauncher, etc.) appear as normal XDG windows; started automatically by stackcomp
+- `xorg-xwayland` — pulled in by xwayland-satellite and is needed for X11 client support.
+
+Set `STACKCOMP_X11=0` to disable satellite. Display is auto-picked (`:2`..`:99`, first free socket); override with `STACKCOMP_X11_DISPLAY=:12`.
+
+Java/X11 apps (e.g. ATLauncher) often need:
+`_JAVA_AWT_WM_NONREPARENTING=1 atlauncher`
 
 ## IPC (Current State)
 
