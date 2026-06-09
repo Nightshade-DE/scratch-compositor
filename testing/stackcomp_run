@@ -271,7 +271,17 @@ else
     if [ "$EXIT_CODE" -eq 137 ]; then
         log_startup ERROR "Exit 137 means SIGKILL (often debugger stop, external kill, or OOM killer)."
     fi
-    log_startup ERROR "Check the detailed crash log at: $CRASH_LOG_FILE"
+    if [ "$STACKCOMP_ENABLE_CRASH_HANDLER" -eq 1 ]; then
+        if [ -s "$CRASH_LOG_FILE" ]; then
+            log_startup ERROR "Check the detailed crash log at: $CRASH_LOG_FILE"
+        elif [ -f "$CRASH_LOG_FILE" ]; then
+            log_startup INFO "No crash marker recorded in crash log (file exists but is empty): $CRASH_LOG_FILE"
+        else
+            log_startup INFO "No crash marker recorded (crash log file not found): $CRASH_LOG_FILE"
+        fi
+    else
+        log_startup INFO "Crash handler is disabled (--no-crash-handler); no crash marker file is expected."
+    fi
     dump_recent_error_summary
 fi
 
