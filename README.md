@@ -54,6 +54,11 @@ command -v xwayland-satellite
 
 Set `STACKCOMP_X11=0` to disable satellite. Display is auto-picked (`:2`..`:99`, first free socket); override with `STACKCOMP_X11_DISPLAY=:12`.
 
+Launcher default is session-aware:
+
+- nested (`WLR_BACKENDS=x11|wayland`): satellite defaults to disabled
+- native (`WLR_BACKENDS=drm,libinput`): satellite defaults to enabled
+
 Java/X11 apps (e.g. ATLauncher) often need:
 `_JAVA_AWT_WM_NONREPARENTING=1 atlauncher`
 
@@ -118,6 +123,31 @@ Run:
 ```bash
 ./build/stackcomp
 ```
+
+Release-style launcher run (recommended for daily use):
+
+```bash
+./testing/stackcomp_run
+```
+
+The launcher `testing/stackcomp_run` is a convenient way to initialize the compositor with sane defaults.
+It supports, among others, these runtime options:
+
+- `STACKCOMP_DBG=0|1|2`
+- `STACKCOMP_CFG=/path/to/config`
+- `STACKCOMP_X11=0|1`
+- `STACKCOMP_X11_DISPLAY=:12`
+
+Examples:
+
+```bash
+STACKCOMP_DBG=0 ./testing/stackcomp_run
+STACKCOMP_CFG=/etc/stackcomp/stackcomp.conf STACKCOMP_DBG=1 ./testing/stackcomp_run
+```
+
+For full launcher behavior and all options, see:
+
+- `testing/LAUNCHER.md`
 
 ## Tests
 

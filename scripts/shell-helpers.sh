@@ -1,5 +1,14 @@
 #!/bin/sh
-# Shared startup/shutdown helpers: logging, process launch, backend probes, and run summaries.
+# Shared stackcomp startup/shutdown helpers.
+# - Provides unified startup/shutdown logging helpers.
+# - Starts background services with optional shutdown registration.
+# - Detects reachable X11 displays for nested-mode startup decisions.
+# - Runs stackcomp with capture into startup logs.
+# - Emits compact per-run error summaries from core/crash logs.
+################################################################################
+
+# Logging
+# ==============================================================================
 
 # Write one timestamped log line to CURRENT_LOG_FILE.
 log_message() {
@@ -23,6 +32,9 @@ log_shutdown() {
     log_message "$@"
 }
 
+
+# Process launch helpers
+# ==============================================================================
 
 # Start a service, stream output to startup log, and register it for shutdown cleanup.
 launch() {
@@ -48,6 +60,9 @@ launch_nokill() {
         log_startup INFO "[$cmd_name] $line"
     done &
 }
+
+# Display/session probe helpers
+# ==============================================================================
 
 # Return success if the given X11 display can be queried.
 x11_display_reachable_on() {
@@ -104,8 +119,12 @@ line_count_or_zero() {
     fi
 }
 
+# Runtime capture helpers
+# ==============================================================================
+
 # Run stackcomp and mirror stdout/stderr into the startup log via FIFO+tee.
-# Expects LOG_DIR, STACKCOMP_STARTUP_LOG_FILE, COMP_ROOT_DIR, CONFIG_FILE, LOG_FILE, CRASH_LOG_FILE.
+# Expects LOG_DIR, STACKCOMP_STARTUP_LOG_FILE, COMP_ROOT_DIR, CONFIG_FILE, LOG_FILE, CRASH_LOG_FILE,
+# STACKCOMP_LOG_LEVEL and STACKCOMP_ENABLE_CRASH_HANDLER.
 run_stackcomp_with_capture() {
     fifo_path=$(mktemp -u "$LOG_DIR/stackcomp-output.XXXXXX.fifo") || return 1
     if ! mkfifo "$fifo_path"; then
@@ -116,13 +135,24 @@ run_stackcomp_with_capture() {
     tee -a "$STACKCOMP_STARTUP_LOG_FILE" <"$fifo_path" &
     tee_pid=$!
 
-    "$COMP_ROOT_DIR/build/stackcomp" -c "$CONFIG_FILE" --log-level debug --log-file "$LOG_FILE" --crash-log "$CRASH_LOG_FILE" >"$fifo_path" 2>&1
+    stackcomp_bin="$COMP_ROOT_DIR/build/stackcomp"
+    level="${STACKCOMP_LOG_LEVEL:-error}"
+    enable_crash="${STACKCOMP_ENABLE_CRASH_HANDLER:-0}"
+
+    if [ "$enable_crash" = "1" ]; then
+        "$stackcomp_bin" -c "$CONFIG_FILE" --log-level "$level" --log-file "$LOG_FILE" --crash-log "$CRASH_LOG_FILE" >"$fifo_path" 2>&1
+    else
+        "$stackcomp_bin" -c "$CONFIG_FILE" --log-level "$level" --log-file "$LOG_FILE" --no-crash-handler >"$fifo_path" 2>&1
+    fi
     cmd_status=$?
 
     wait "$tee_pid"
     rm -f "$fifo_path"
     return "$cmd_status"
 }
+
+# Error summary helpers
+# ==============================================================================
 
 # Emit a compact error summary for the current run only.
 # Expects LOG_DIR, LOG_FILE, CRASH_LOG_FILE, CORE_LOG_BASELINE, CRASH_LOG_BASELINE, STACKCOMP_STARTUP_LOG_FILE.

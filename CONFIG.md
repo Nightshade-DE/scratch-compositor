@@ -16,6 +16,20 @@ A starting point for your own file is **`stackcomp.conf.example`** in this repos
 
 ---
 
+## Launcher environment (stackcomp_run)
+
+Besides CLI `-c/--config` and `$STACKCOMP_CONFIG`, the config path can also be
+selected via launcher environment variable `STACKCOMP_CFG` in
+`testing/stackcomp_run`.
+
+Further launcher details are documented in:
+
+- `testing/LAUNCHER.md`
+
+This keeps CONFIG.md focused on INI syntax and behavior.
+
+---
+
 ## Section `[bind]`
 
 Each `[bind]` block describes **one** shortcut. Start a new `[bind]` section for each binding.
