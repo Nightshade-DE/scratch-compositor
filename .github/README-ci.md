@@ -70,6 +70,14 @@ This runs:
 1. meson setup build --reconfigure
 2. meson compile -C build
 3. meson test -C build --print-errorlogs
+4. scripts/test-nested-smoke.sh build
+
+Nested smoke details:
+
+- Uses an existing reachable X11 `DISPLAY` when available.
+- Falls back to `xvfb-run` for headless runner environments.
+- Verifies launcher nested startup/shutdown log markers.
+- Skips only when neither a reachable `DISPLAY` nor `xvfb-run` is available.
 
 ## Step 4: Run CI remotely on GitHub
 
