@@ -47,6 +47,7 @@ struct comp_config;
 /** Number of virtual workspaces (indices 0 .. COUNT-1; keybinds/IPC use 1..COUNT). */
 #define COMP_WORKSPACE_COUNT 9
 
+/** Global layout mode for normal toplevel arrangement. */
 enum comp_layout
 {
 	COMP_LAYOUT_STACK = 0,
@@ -56,6 +57,7 @@ enum comp_layout
 
 void comp_config_sync_layout_env(enum comp_layout layout);
 
+/** Active pointer grab mode while dragging/resizing. */
 enum comp_grab
 {
 	COMP_GRAB_NONE,
@@ -65,6 +67,7 @@ enum comp_grab
 
 struct comp_server;
 
+/** Runtime wrapper for one wlroots output plus per-workspace scroll state. */
 struct comp_output
 {
 	struct wl_list link;
@@ -94,6 +97,7 @@ struct comp_layer
 	struct wl_listener new_popup;
 };
 
+/** Runtime state for one xdg_toplevel and its compositor-side metadata. */
 struct comp_toplevel
 {
 	struct wl_list link;
@@ -137,6 +141,7 @@ struct comp_toplevel
 	struct wl_listener xdg_decoration_request_mode;
 };
 
+/** Keyboard device listeners bound to one input device instance. */
 struct comp_keyboard
 {
 	struct wl_listener destroy;
@@ -166,6 +171,7 @@ struct comp_tracked_input
 	struct wl_listener destroy;
 };
 
+/** Root compositor state and protocol objects for one running instance. */
 struct comp_server
 {
 	struct wl_display *wl_display;

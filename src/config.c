@@ -16,6 +16,7 @@
 
 #include "server.h"
 
+/** strdup wrapper that tolerates NULL input. */
 static char *xstrdup(const char *s) {
 	if (!s) {
 		return NULL;
@@ -23,6 +24,7 @@ static char *xstrdup(const char *s) {
 	return strdup(s);
 }
 
+/** Trim ASCII whitespace at both ends of a mutable string in place. */
 static void trim_inplace(char *s) {
 	char *end;
 	while (*s && isspace((unsigned char)*s)) {
@@ -34,6 +36,7 @@ static void trim_inplace(char *s) {
 	}
 }
 
+/** Append one parsed keybind to cfg and reset the temporary bind object. */
 static bool append_bind(struct comp_config *cfg, struct comp_keybind *b) {
 	struct comp_keybind *n = realloc(cfg->binds, (cfg->n_binds + 1) * sizeof(*n));
 	if (!n) {
@@ -101,6 +104,7 @@ void comp_config_free(struct comp_config *cfg) {
 	free(cfg);
 }
 
+/** Parse one modifier token used in mods= lines. */
 static uint32_t parse_mod_token(const char *tok) {
 	if (!strcasecmp(tok, "shift")) {
 		return WLR_MODIFIER_SHIFT;
@@ -118,6 +122,7 @@ static uint32_t parse_mod_token(const char *tok) {
 	return 0;
 }
 
+/** Parse a mods= expression like Super+Shift into wlroots modifier bits. */
 static bool parse_mods_string(const char *value, uint32_t *out) {
 	char *buf = strdup(value);
 	if (!buf) {
@@ -137,6 +142,7 @@ static bool parse_mods_string(const char *value, uint32_t *out) {
 	return true;
 }
 
+/** Map action= strings (with aliases) to internal keybind actions. */
 static bool parse_action(const char *v, enum comp_keybind_action *a) {
 	if (!strcasecmp(v, "quit") || !strcasecmp(v, "exit")) {
 		*a = COMP_KEYBIND_QUIT;
@@ -324,6 +330,7 @@ static void load_defaults(struct comp_config *cfg) {
 	append_bind(cfg, &b);
 }
 
+/** Build config path candidates from XDG/HOME and return the first readable one. */
 bool comp_config_default_path(char *out, size_t out_len) {
 	const char *xdg = getenv("XDG_CONFIG_HOME");
 	if (xdg && xdg[0]) {
@@ -342,6 +349,7 @@ bool comp_config_default_path(char *out, size_t out_len) {
 	return false;
 }
 
+/** Evaluate optional when= shell predicate; only exit status 0 enables the bind. */
 bool comp_keybind_when_ok(const struct comp_keybind *bind) {
 	if (!bind->when_shell || !bind->when_shell[0]) {
 		return true;
@@ -474,11 +482,13 @@ bool comp_config_try_bindings(struct comp_config *cfg, struct comp_server *serve
 		return false;
 	}
 
+	/* Ignore unrelated modifier bits so binds stay layout/backend agnostic. */
 	uint32_t mods = mods_filtered & COMP_BIND_MOD_FILTER;
 	comp_config_sync_shell_env(server);
 
 	for (size_t i = 0; i < cfg->n_binds; i++) {
 		struct comp_keybind *b = &cfg->binds[i];
+		/* Matching is first exact key+mods, then optional when= gate. */
 		if (!keysym_matches_bind(b->keysym, sym) || b->mods != mods) {
 			continue;
 		}
@@ -659,6 +669,7 @@ bad:
 	return false;
 }
 
+/** Validate and finalize one [bind] block before appending it to cfg. */
 static bool flush_bind(struct comp_config *cfg, struct comp_keybind *cur, size_t line_no) {
 	if (!cur->keysym) {
 		if (cur->mods || cur->command || cur->when_shell) {
@@ -708,8 +719,7 @@ static bool flush_bind(struct comp_config *cfg, struct comp_keybind *cur, size_t
 	return true;
 }
 
-struct tile_rule_parse
-{
+struct tile_rule_parse {
 	char *app_id_pat;
 	char *title_pat;
 	bool float_in_tile;
@@ -722,6 +732,7 @@ static void tile_rule_parse_reset(struct tile_rule_parse *p) {
 	memset(p, 0, sizeof(*p));
 }
 
+/** Compile and append one [tile_rule] entry from its parsed temporary fields. */
 static bool flush_tile_rule(struct comp_config *cfg, struct tile_rule_parse *p, size_t line_no) {
 	const bool have_app = p->app_id_pat && p->app_id_pat[0];
 	const bool have_tit = p->title_pat && p->title_pat[0];
@@ -771,8 +782,7 @@ static bool flush_tile_rule(struct comp_config *cfg, struct tile_rule_parse *p, 
 	return true;
 }
 
-struct decoration_rule_parse
-{
+struct decoration_rule_parse {
 	char *app_id_pat;
 	char *title_pat;
 	bool strip;
@@ -785,6 +795,7 @@ static void decoration_rule_parse_reset(struct decoration_rule_parse *p) {
 	memset(p, 0, sizeof(*p));
 }
 
+/** Compile and append one [decoration_rule] entry from parsed temporary fields. */
 static bool flush_decoration_rule(struct comp_config *cfg, struct decoration_rule_parse *p, size_t line_no) {
 	const bool have_app = p->app_id_pat && p->app_id_pat[0];
 	const bool have_tit = p->title_pat && p->title_pat[0];
@@ -848,8 +859,7 @@ static bool parse_tile_mode(const char *v, bool *float_out) {
 	return false;
 }
 
-struct input_map_parse
-{
+struct input_map_parse {
 	char *match_pat;
 	char *output_name;
 	char *type_str;
@@ -862,6 +872,7 @@ static void input_map_parse_reset(struct input_map_parse *p) {
 	memset(p, 0, sizeof(*p));
 }
 
+/** Parse input_map type= tokens into a device-type bitmask. */
 static bool parse_input_map_type_field(const char *value, uint32_t *types_out, size_t line_no, const char *path) {
 	if (!value || !value[0]) {
 		*types_out = COMP_INPUT_MAP_TYPE_TOUCH | COMP_INPUT_MAP_TYPE_TABLET;
@@ -896,6 +907,7 @@ static bool parse_input_map_type_field(const char *value, uint32_t *types_out, s
 	return true;
 }
 
+/** Validate and append one [input_map] block to cfg. */
 static bool flush_input_map_rule(struct comp_config *cfg, struct input_map_parse *p, size_t line_no,
 								 const char *path) {
 	const bool have_match = p->match_pat && p->match_pat[0];
@@ -1035,6 +1047,7 @@ bool comp_config_load(const char *path, struct comp_config **cfg_out) {
 	size_t line_no = 0;
 	bool ok = true;
 
+	/* Single-pass parser: section switches flush pending block state. */
 	while (fgets(linebuf, sizeof(linebuf), f)) {
 		line_no++;
 		char *line = linebuf;
@@ -1266,6 +1279,7 @@ bool comp_config_load(const char *path, struct comp_config **cfg_out) {
 	}
 	fclose(f);
 
+	/* Flush the last open block because file end has no section boundary. */
 	if (ok && in_bind) {
 		ok = flush_bind(cfg, &cur, line_no);
 	}
