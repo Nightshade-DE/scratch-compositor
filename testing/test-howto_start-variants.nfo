@@ -9,17 +9,17 @@ release/debug modes, and crash logging paths.
 
 Key paths
 ---------
-Project root: <your_local_repo>/scratch-compositor
-Binary:       <your_local_repo>/scratch-compositor/build/morph
-Launcher:     <your_local_repo>/scratch-compositor/testing/morph_run
+Project root: <your_local_repo>/morph
+Binary:       <your_local_repo>/morph/build/morph
+Launcher:     <your_local_repo>/morph/testing/morph_run
 Prod wrapper: /usr/local/bin/morph-session (or your package prefix bindir)
-Env file:     <your_local_repo>/scratch-compositor/config/environment
-Default cfg:  <your_local_repo>/scratch-compositor/testing/morph.conf
-System startup:  <your_local_repo>/scratch-compositor/scripts/system_startup.sh
-System reload:   <your_local_repo>/scratch-compositor/scripts/system_reload.sh
-System shutdown: <your_local_repo>/scratch-compositor/scripts/system_shutdown.sh
-Portals:      <your_local_repo>/scratch-compositor/config/portals
-Shell tests:  <your_local_repo>/scratch-compositor/tests/test_shell_runtime.sh
+Env file:     <your_local_repo>/morph/config/environment
+Default cfg:  <your_local_repo>/morph/testing/morph.conf
+System startup:  <your_local_repo>/morph/scripts/system_startup.sh
+System reload:   <your_local_repo>/morph/scripts/system_reload.sh
+System shutdown: <your_local_repo>/morph/scripts/system_shutdown.sh
+Portals:      <your_local_repo>/morph/config/portals
+Shell tests:  <your_local_repo>/morph/tests/test_shell_runtime.sh
 
 Runtime log location
 --------------------
@@ -111,7 +111,7 @@ C) Native test (TTY / DRM+libinput)
 -----------------------------------
 Run from a VT/TTY (outside another desktop session):
 
-  cd <your_local_repo>/scratch-compositor
+  cd <your_local_repo>/morph
   ./testing/morph_run
 
 Check:
@@ -125,7 +125,7 @@ D) Nested test (inside X11 or Wayland session)
 ----------------------------------------------
 Run from terminal inside existing desktop session:
 
-  cd <your_local_repo>/scratch-compositor
+  cd <your_local_repo>/morph
   ./testing/morph_run
 
 Check:
@@ -223,7 +223,7 @@ H) Direct binary test (bypass launcher)
 ---------------------------------------
 Use when validating compositor flags directly:
 
-  cd <your_local_repo>/scratch-compositor
+  cd <your_local_repo>/morph
   ./build/morph \
     -c ./testing/morph.conf \
     --log-level debug \
@@ -235,7 +235,7 @@ I) Crashdump path test (intentional)
 ------------------------------------
 Use only to validate crash marker output:
 
-  cd <your_local_repo>/scratch-compositor
+  cd <your_local_repo>/morph
   ./build/morph \
     -c ./testing/morph.conf \
     --log-level debug \
