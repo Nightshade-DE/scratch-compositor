@@ -7,7 +7,8 @@
 
 # Activate helper functions for startup logging and managed launch helpers.
 CURRENT_LOG_FILE="${STACKCOMP_STARTUP_LOG_FILE:?STACKCOMP_STARTUP_LOG_FILE is not set}"
-. "$COMP_ROOT_DIR/scripts/shell-helpers.sh"
+HELPER_LIB="${STACKCOMP_HELPER_LIB:-$(dirname "$(readlink -f "$0")")/shell-helpers.sh}"
+. "$HELPER_LIB"
 
 if stackcomp_session_is_nested; then
     # Nested helper clients must target the compositor socket selected by the launcher.

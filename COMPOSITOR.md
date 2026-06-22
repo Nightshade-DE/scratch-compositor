@@ -69,7 +69,7 @@ Wayland clients cannot read arbitrary GTK/Qt theme files for **other** clients; 
 
 ## Build & run
 
-`meson setup build && meson compile -C build`. Install with `meson install -C build` (or distro packaging): **`stackcomp`** goes to the prefix **`bindir`**, and **`data/stackcomp.desktop`** is installed as **`share/wayland-sessions/stackcomp.desktop`** so greetd, SDDM, and similar greeters can list a **Stackcomp** Wayland session.
+`meson setup build && meson compile -C build`. Install with `meson install -C build` (or distro packaging): **`stackcomp`** and **`stackcomp-session`** go to the prefix **`bindir`**, the managed runtime files land under **`sysconfdir/stackcomp`**, and **`data/stackcomp.desktop`** is installed as **`share/wayland-sessions/stackcomp.desktop`** so greetd, SDDM, and similar greeters can start the session through the production wrapper.
 
 ```bash
 meson setup build && meson compile -C build

@@ -11,9 +11,8 @@
 
 # Activate helper functions for shutdown logging so user cleanup can emit
 # messages into the standard shutdown log when needed.
-# shellcheck disable=SC2034
 CURRENT_LOG_FILE="${STACKCOMP_SHUTDOWN_LOG_FILE:?STACKCOMP_SHUTDOWN_LOG_FILE is not set}"
-. "$COMP_ROOT_DIR/scripts/shell-helpers.sh"
+. "${STACKCOMP_HELPER_LIB:?STACKCOMP_HELPER_LIB is not set}"
 
 # Optional user cleanup goes here.
 # Example:

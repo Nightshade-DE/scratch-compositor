@@ -289,14 +289,13 @@ stackcomp_run_optional_user_hook() {
     fi
 
     if [ -r "$hook_path" ]; then
-        # The XDG fallback keeps direct binary starts and minimal configs usable
-        # without forcing every config to spell out all hook paths explicitly.
-        log_message INFO "Running default user $hook_kind hook: $hook_path"
-        if ! sh "$hook_path"; then
-            log_message WARN "Default user $hook_kind hook exited with a non-zero status: $hook_path"
-            return 1
-        fi
-        return 0
+        # Source the fallback hook in the current shell so helper functions stay
+        # available even when the user relies on the conventional XDG path
+        # instead of configuring an explicit hook command in stackcomp.conf.
+        log_message INFO "Sourcing default user $hook_kind hook: $hook_path"
+        # shellcheck disable=SC1090
+        . "$hook_path"
+        return $?
     fi
 
     log_message INFO "No user $hook_kind hook configured or found."
@@ -397,8 +396,8 @@ line_count_or_zero() {
 # ==============================================================================
 
 # Run stackcomp and mirror stdout/stderr into the startup log via FIFO+tee.
-# Expects LOG_DIR, STACKCOMP_STARTUP_LOG_FILE, COMP_ROOT_DIR, CONFIG_FILE, LOG_FILE, CRASH_LOG_FILE,
-# STACKCOMP_LOG_LEVEL and STACKCOMP_ENABLE_CRASH_HANDLER.
+# Expects LOG_DIR, STACKCOMP_STARTUP_LOG_FILE, STACKCOMP_BIN, CONFIG_FILE, LOG_FILE,
+# CRASH_LOG_FILE, STACKCOMP_LOG_LEVEL and STACKCOMP_ENABLE_CRASH_HANDLER.
 run_stackcomp_with_capture() {
     fifo_path=$(mktemp -u "$LOG_DIR/stackcomp-output.XXXXXX.fifo") || return 1
     if ! mkfifo "$fifo_path"; then
@@ -409,7 +408,7 @@ run_stackcomp_with_capture() {
     tee -a "$STACKCOMP_STARTUP_LOG_FILE" <"$fifo_path" &
     tee_pid=$!
 
-    stackcomp_bin="$COMP_ROOT_DIR/build/stackcomp"
+    stackcomp_bin="${STACKCOMP_BIN:?STACKCOMP_BIN is not set}"
     level="${STACKCOMP_LOG_LEVEL:-error}"
     enable_crash="${STACKCOMP_ENABLE_CRASH_HANDLER:-0}"
     if [ "$enable_crash" = "1" ]; then

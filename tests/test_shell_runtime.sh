@@ -219,6 +219,7 @@ test_system_startup_nested_sets_wayland_display() {
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
     export COMP_ROOT_DIR="$repo_root"
+    export STACKCOMP_HELPER_LIB="$repo_root/scripts/shell-helpers.sh"
     export STACKCOMP_STARTUP_LOG_FILE="$tmpdir/startup.log"
     export STACKCOMP_SESSION_MODE=nested
     export WLR_WL_SOCKET="wayland-test-socket"
@@ -260,6 +261,7 @@ EOF
 
     export PATH="$tmpdir/bin:$PATH"
     export COMP_ROOT_DIR="$repo_root"
+    export STACKCOMP_HELPER_LIB="$repo_root/scripts/shell-helpers.sh"
     export STACKCOMP_STARTUP_LOG_FILE="$tmpdir/startup.log"
     export STACKCOMP_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
     export STACKCOMP_USER_RELOAD_HOOK_CMD="$tmpdir/reload-hook.sh"
@@ -305,6 +307,7 @@ EOF
     chmod +x "$tmpdir/config/portals"
 
     export COMP_ROOT_DIR="$tmpdir"
+    export STACKCOMP_HELPER_LIB="$tmpdir/scripts/shell-helpers.sh"
     export STACKCOMP_STARTUP_LOG_FILE="$tmpdir/startup.log"
     export STACKCOMP_SESSION_MODE=native
     export STACKCOMP_SYSTEM_CONFIG_DIR="$tmpdir/config"
@@ -330,6 +333,7 @@ test_system_startup_runs_user_hook_command() {
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
     export COMP_ROOT_DIR="$repo_root"
+    export STACKCOMP_HELPER_LIB="$repo_root/scripts/shell-helpers.sh"
     export STACKCOMP_STARTUP_LOG_FILE="$tmpdir/startup.log"
     export STACKCOMP_SESSION_MODE=nested
     export WLR_WL_SOCKET="wayland-test-socket"
@@ -418,6 +422,7 @@ test_system_shutdown_cleans_registered_processes() {
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
     export COMP_ROOT_DIR="$repo_root"
+    export STACKCOMP_HELPER_LIB="$repo_root/scripts/shell-helpers.sh"
     export STACKCOMP_SHUTDOWN_LOG_FILE="$tmpdir/shutdown.log"
     export STACKCOMP_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
     export STACKCOMP_SESSION_MODE=native
@@ -474,7 +479,7 @@ key = Return
 action = exec
 command = foot
 EOF
-    cat > "$tmpdir/system-config/config" <<'EOF'
+    cat > "$tmpdir/system-config/stackcomp.conf" <<'EOF'
 [bind]
 mods = Super
 key = Q
@@ -484,7 +489,7 @@ EOF
     env -u DISPLAY -u WAYLAND_DISPLAY \
         XDG_CONFIG_HOME="$tmpdir/user-config" \
         XDG_STATE_HOME="$tmpdir/state" \
-        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/system-config/config" \
+        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/system-config/stackcomp.conf" \
         STACKCOMP_RESOLVE_ONLY=1 \
         "$repo_root/testing/stackcomp_run"
 
@@ -501,7 +506,7 @@ test_launcher_uses_system_config_when_user_config_is_missing() {
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
     mkdir -p "$tmpdir/system-config" "$tmpdir/state" "$tmpdir/empty-config"
-    cat > "$tmpdir/system-config/config" <<'EOF'
+    cat > "$tmpdir/system-config/stackcomp.conf" <<'EOF'
 [bind]
 mods = Super
 key = Q
@@ -511,13 +516,13 @@ EOF
     env -u DISPLAY -u WAYLAND_DISPLAY \
         XDG_CONFIG_HOME="$tmpdir/empty-config" \
         XDG_STATE_HOME="$tmpdir/state" \
-        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/system-config/config" \
+        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/system-config/stackcomp.conf" \
         STACKCOMP_RESOLVE_ONLY=1 \
         "$repo_root/testing/stackcomp_run"
 
     assert_file_contains \
         "$tmpdir/state/stackcomp/stackcomp-startup.log" \
-        "Config file path:             $tmpdir/system-config/config (system config fallback)"
+        "Config file path:             $tmpdir/system-config/stackcomp.conf (system config fallback)"
 
     rm -rf "$tmpdir"
     trap - EXIT HUP INT TERM
@@ -601,6 +606,72 @@ EOF
     trap - EXIT HUP INT TERM
 }
 
+test_production_wrapper_resolves_system_config_with_repo_overrides() {
+    tmpdir=$(make_tmpdir)
+    trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+    mkdir -p "$tmpdir/system-config" "$tmpdir/state" "$tmpdir/empty-config"
+    cat > "$tmpdir/system-config/stackcomp.conf" <<'EOF'
+[bind]
+mods = Super
+key = Q
+action = quit
+EOF
+
+    env -u DISPLAY -u WAYLAND_DISPLAY \
+        XDG_CONFIG_HOME="$tmpdir/empty-config" \
+        XDG_STATE_HOME="$tmpdir/state" \
+        STACKCOMP_SYSTEM_HOOK_DIR="$repo_root/scripts" \
+        STACKCOMP_SYSTEM_CONFIG_DIR="$repo_root/config" \
+        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/system-config/stackcomp.conf" \
+        STACKCOMP_BIN=/bin/true \
+        STACKCOMP_RESOLVE_ONLY=1 \
+        sh "$repo_root/scripts/stackcomp-session"
+
+    assert_file_contains \
+        "$tmpdir/state/stackcomp/stackcomp-startup.log" \
+        "Managed hook directory:       $repo_root/scripts"
+    assert_file_contains \
+        "$tmpdir/state/stackcomp/stackcomp-startup.log" \
+        "Config file path:             $tmpdir/system-config/stackcomp.conf (system config fallback)"
+
+    rm -rf "$tmpdir"
+    trap - EXIT HUP INT TERM
+}
+
+test_meson_install_manifest_lists_runtime_artifacts() {
+    tmpdir=$(make_tmpdir)
+    trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+    manifest="$tmpdir/installed.json"
+    meson introspect --installed "$repo_root/build" > "$manifest"
+
+    assert_file_contains "$manifest" "/usr/local/bin/stackcomp-session"
+    assert_file_contains "$manifest" "/usr/local/etc/stackcomp/stackcomp.conf"
+    assert_file_contains "$manifest" "/usr/local/etc/stackcomp/system_startup.sh"
+    assert_file_contains "$manifest" "/usr/local/share/wayland-sessions/stackcomp.desktop"
+    assert_file_contains "$manifest" "/usr/local/share/doc/stackcomp/CONFIG.md"
+
+    rm -rf "$tmpdir"
+    trap - EXIT HUP INT TERM
+}
+
+test_system_uninstall_prints_manifest_without_removing() {
+    tmpdir=$(make_tmpdir)
+    trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+    output_file="$tmpdir/system-uninstall.out"
+    sh "$repo_root/scripts/system-uninstall.sh" --builddir "$repo_root/build" --print-only > "$output_file"
+
+    assert_file_contains "$output_file" "Installed artifacts for build dir: $repo_root/build"
+    assert_file_contains "$output_file" "/usr/local/bin/stackcomp-session"
+    assert_file_contains "$output_file" "/usr/local/etc/stackcomp/stackcomp.conf"
+    assert_file_contains "$output_file" "Print-only mode active. No files were removed."
+
+    rm -rf "$tmpdir"
+    trap - EXIT HUP INT TERM
+}
+
 test_launch_helpers_track_expected_processes
 test_reload_helper_restarts_without_duplicate_shutdown_entries
 test_reload_once_starts_component_when_missing
@@ -617,3 +688,6 @@ test_launcher_uses_system_config_when_user_config_is_missing
 test_launcher_fails_when_no_config_exists
 test_launcher_can_opt_into_builtin_fallback
 test_launcher_restores_caller_environment_over_file_layers
+test_production_wrapper_resolves_system_config_with_repo_overrides
+test_meson_install_manifest_lists_runtime_artifacts
+test_system_uninstall_prints_manifest_without_removing

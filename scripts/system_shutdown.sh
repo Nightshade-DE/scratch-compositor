@@ -8,7 +8,8 @@
 # Activate helper functions for shutdown logging and shared runtime checks.
 # shellcheck disable=SC2034
 CURRENT_LOG_FILE="${STACKCOMP_SHUTDOWN_LOG_FILE:?STACKCOMP_SHUTDOWN_LOG_FILE is not set}"
-. "$COMP_ROOT_DIR/scripts/shell-helpers.sh"
+HELPER_LIB="${STACKCOMP_HELPER_LIB:-$(dirname "$(readlink -f "$0")")/shell-helpers.sh}"
+. "$HELPER_LIB"
 
 log_shutdown INFO "Starting session cleanup."
 

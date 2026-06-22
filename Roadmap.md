@@ -273,31 +273,37 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 - [ ] Provide the binary and session wrapper under stable paths for user scripts.
 - [ ] Define system install cleanly via Meson and/or a separate install script.
 - [ ] Plan uninstall strategy from the start:
-  - [ ] dev uninstall for created symlinks and locally installed helpers
-  - [ ] system uninstall for installed files under `/usr/bin`, `/etc/stackcomp`, `/usr/share/wayland-sessions`, and `/usr/share/doc/stackcomp`
-  - [ ] never remove real user files automatically; only revert install-created symlinks or generated files
-- [ ] Ensure `testing/*` is never installed as production runtime.
+  - [x] dev uninstall for created symlinks and locally installed helpers
+  - [x] system uninstall for installed files under `/usr/bin`, `/etc/stackcomp`, `/usr/share/wayland-sessions`, and `/usr/share/doc/stackcomp`
+  - [x] never remove real user files automatically; only revert install-created symlinks or generated files
+- [x] Create a dedicated dev install script.
+- [x] Plan dev install symlinks into `~/.config/stackcomp`.
+- [x] Provide clear `sudo` output/help for dev install of the session desktop file.
+- [x] Provide the binary and session wrapper under stable paths for user scripts.
+- [x] Define system install cleanly via Meson and/or a separate install script.
+- [x] Ensure `testing/*` is never installed as production runtime.
 
 ### 9. Meson and Packaging Adjustments
 
-- [ ] Add install targets for `/etc/stackcomp/*`.
-- [ ] Add an install target for the session wrapper.
-- [ ] Wire the session desktop file cleanly to the production entrypoint.
-- [ ] Install docs and reference files into `/usr/share/doc/stackcomp/`.
+- [x] Add install targets for `/etc/stackcomp/*`.
+- [x] Add an install target for the session wrapper.
+- [x] Wire the session desktop file cleanly to the production entrypoint.
+- [x] Install docs and reference files into `/usr/share/doc/stackcomp/`.
 - [ ] Separate which files are templates and which are real runtime files.
-- [ ] Document and, where useful, automate a clean uninstall path for system and dev installs.
+- [x] Document and, where useful, automate a clean uninstall path for system and dev installs.
 
 ### 10. Tests
 
 #### Automated
 
-- [ ] Add tests for config priorities.
-- [ ] Add tests for environment priorities.
+- [x] Add tests for config priorities.
+- [x] Add tests for environment priorities.
 - [x] Add tests for `launch`, `launch_nested`, and `launch_nokill`.
 - [x] Add tests for the shutdown tracker and `shutdown_list.nfo`.
 - [x] Integrate tests for startup preparation and portal initialization into the shared Meson test run.
-- [ ] Add tests for reload hook wiring.
-- [ ] Add tests for install artifacts or at least build/packaging checks.
+- [x] Add tests for reload hook wiring.
+- [x] Add tests for install artifacts or at least build/packaging checks.
+- [x] Add tests for conservative system uninstall manifest handling.
 
 #### Manual
 

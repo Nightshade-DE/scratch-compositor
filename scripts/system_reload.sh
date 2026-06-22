@@ -7,7 +7,8 @@
 
 # Reuse the startup log until reload gets its own dedicated runtime log file.
 CURRENT_LOG_FILE="${STACKCOMP_STARTUP_LOG_FILE:?STACKCOMP_STARTUP_LOG_FILE is not set}"
-. "$COMP_ROOT_DIR/scripts/shell-helpers.sh"
+HELPER_LIB="${STACKCOMP_HELPER_LIB:-$(dirname "$(readlink -f "$0")")/shell-helpers.sh}"
+. "$HELPER_LIB"
 
 log_message INFO "Starting managed reload hook."
 

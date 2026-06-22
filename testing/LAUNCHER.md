@@ -13,6 +13,7 @@ Use this guide for:
 
 The compositor INI syntax is documented in CONFIG.md.
 This file covers launcher runtime flow and files only.
+It documents the development launcher, not the installed production wrapper.
 
 For all environment variables and examples (including XKB settings), see:
 
@@ -122,3 +123,16 @@ Allow builtin fallback when no config exists:
 - README.md for quick project overview and entrypoints
 - config/ENVIRONMENT.md for runtime environment variables and XKB settings
 - testing/test-howto_start-variants.nfo for test-oriented command sequence
+
+## Production Counterpart
+
+The installed production wrapper is `stackcomp-session`.
+
+Differences from `testing/stackcomp_run`:
+
+- it defaults to `/etc/stackcomp` instead of repository paths
+- it starts the installed `stackcomp` binary instead of `./build/stackcomp`
+- it is installed through Meson and referenced by the session desktop file
+
+The development launcher remains the place for repo-local defaults, tests, and
+fast nested/native validation during development.

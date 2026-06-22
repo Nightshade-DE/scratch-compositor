@@ -12,6 +12,7 @@ Key paths
 Project root: <your_local_repo>/scratch-compositor
 Binary:       <your_local_repo>/scratch-compositor/build/stackcomp
 Launcher:     <your_local_repo>/scratch-compositor/testing/stackcomp_run
+Prod wrapper: /usr/local/bin/stackcomp-session (or your package prefix bindir)
 Env file:     <your_local_repo>/scratch-compositor/config/environment
 Default cfg:  <your_local_repo>/scratch-compositor/testing/stackcomp.conf
 System startup:  <your_local_repo>/scratch-compositor/scripts/system_startup.sh
@@ -54,6 +55,12 @@ Pre-checks
 4) Run the automated test suite once:
    meson test -C build --print-errorlogs
 
+5) Optional: inspect the current install manifest:
+   meson introspect --installed build
+
+6) Optional: print the sudo commands for a display-manager-visible dev session:
+   ./scripts/dev-install.sh install --print-sudo-help
+
 
 A0) Automated test scope
 ------------------------
@@ -67,6 +74,8 @@ The current automated run covers:
   - managed user hook execution and config hook parsing
   - portal runtime variable logging
   - managed shutdown cleanup
+  - production wrapper resolve-only checks
+  - Meson install manifest coverage for runtime artifacts
 
 Use this runbook for everything that still needs manual session validation.
 

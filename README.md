@@ -153,6 +153,48 @@ For full launcher behavior and all options, see:
 - `testing/LAUNCHER.md`
 - `config/ENVIRONMENT.md` (environment variables, including XKB settings)
 
+## Install Paths
+
+`meson install -C build` now installs the production session runtime as:
+
+- `stackcomp` under the configured `bindir`
+- `stackcomp-session` under the configured `bindir`
+- runtime hooks and base files under `sysconfdir/stackcomp`
+- `stackcomp.desktop` under `share/wayland-sessions`
+- selected docs and reference files under `share/doc/stackcomp`
+
+For local development without a full system install, use:
+
+```bash
+./scripts/dev-install.sh install --link-launcher --print-sudo-help
+```
+
+That dev helper can symlink the sample user files into `~/.config/stackcomp`,
+optionally expose `testing/stackcomp_run` as `~/.local/bin/stackcomp-dev-session`
+for direct shell launches, and print the explicit `sudo` commands for a
+display-manager-visible dev session under `/usr/local/bin/stackcomp-dev-session`
+plus `/usr/share/wayland-sessions/stackcomp-dev.desktop`.
+
+To remove only those dev symlinks again:
+
+```bash
+./scripts/dev-install.sh uninstall --link-launcher
+```
+
+The dev uninstall path never removes real user files automatically. For system
+installs, prefer your package manager or inspect `meson introspect --installed build`
+before removing installed files manually. A conservative helper is also
+available:
+
+```bash
+./scripts/system-uninstall.sh --builddir build
+sudo ./scripts/system-uninstall.sh --builddir build --remove
+```
+
+That helper reads the Meson install manifest, prints the exact installed paths,
+and only removes targets that still match the current source/build artifact.
+Modified files are reported and left untouched.
+
 ## Tests
 
 Run automated tests locally with Meson:

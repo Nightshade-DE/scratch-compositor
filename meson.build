@@ -23,6 +23,9 @@ wayland_protocols = dependency('wayland-protocols', version: '>=1.32')
 wayland_scanner = find_program('wayland-scanner')
 sh_prog = find_program('sh')
 
+stackcomp_runtime_dir = get_option('sysconfdir') / 'stackcomp'
+stackcomp_doc_dir = get_option('datadir') / 'doc' / 'stackcomp'
+
 xdg_shell_xml = wayland_protocols.get_variable('pkgdatadir') / 'stable/xdg-shell/xdg-shell.xml'
 xdg_shell_server_h = custom_target(
   'xdg-shell-protocol',
@@ -108,6 +111,51 @@ test(
 )
 
 install_data(
+  files(
+    'config/stackcomp.conf',
+    'config/environment',
+    'config/portals',
+  ),
+  install_dir: stackcomp_runtime_dir,
+)
+
+install_data(
+  files(
+    'config/startup.sh',
+    'config/reload.sh',
+    'config/shutdown.sh',
+    'scripts/shell-helpers.sh',
+    'scripts/system_startup.sh',
+    'scripts/system_shutdown.sh',
+    'scripts/system_reload.sh',
+  ),
+  install_dir: stackcomp_runtime_dir,
+  install_mode: 'rwxr-xr-x',
+)
+
+install_data(
+  files('scripts/stackcomp-session'),
+  install_dir: get_option('bindir'),
+  rename: 'stackcomp-session',
+  install_mode: 'rwxr-xr-x',
+)
+
+install_data(
   files('data/stackcomp.desktop'),
   install_dir: get_option('datadir') / 'wayland-sessions',
+)
+
+install_data(
+  files(
+    'README.md',
+    'CONFIG.md',
+    'COMPOSITOR.md',
+    'CRASHING.md',
+    'TESTING.md',
+    'config/ENVIRONMENT.md',
+    'testing/LAUNCHER.md',
+    'testing/stackcomp.conf',
+    'testing/test-howto_start-variants.nfo',
+  ),
+  install_dir: stackcomp_doc_dir,
 )

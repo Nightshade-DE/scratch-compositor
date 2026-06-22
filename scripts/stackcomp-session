@@ -1,28 +1,14 @@
 #!/bin/sh
-# Main stackcomp startup script.
-# - Sets environment variables and logging.
-# - Supports nested mode (inside X11/Wayland) and native mode (TTY).
-# - Can run test clients in nested mode.
-# - Starts compositor, checks exit code, and logs crashes.
-# - Sources shared helpers from scripts/shell-helpers.sh.
-# - Uses log_startup <level> <message> to write to
-#   $STACKCOMP_STARTUP_LOG_FILE.
-# - Starts shutdown script only on compositor error exit.
+# Production stackcomp session wrapper.
+# - Resolves environment, config, logs, and session mode for real sessions.
+# - Keeps the managed startup/shutdown/reload frame active around user hooks.
+# - Starts the installed stackcomp binary instead of the repo-local build.
 ################################################################################
 
-# Resolve the repository root once so every sourced helper and runtime file
-# can use stable project-relative paths.
-# ==============================================================================
-REAL_SCRIPT_PATH=$(readlink -f "$0")
-FILE_DIR=$(dirname "$REAL_SCRIPT_PATH")
-COMP_ROOT_DIR=$(dirname "$FILE_DIR")
-export COMP_ROOT_DIR
-
-# Dev launcher defaults for the "system" layer used inside this repository.
-STACKCOMP_SYSTEM_HOOK_DIR_DEFAULT="$COMP_ROOT_DIR/scripts"
-STACKCOMP_SYSTEM_CONFIG_DIR_DEFAULT="$COMP_ROOT_DIR/config"
-STACKCOMP_SYSTEM_CONFIG_FILE_DEFAULT="$COMP_ROOT_DIR/testing/stackcomp.conf"
-STACKCOMP_BIN_DEFAULT="$COMP_ROOT_DIR/build/stackcomp"
+STACKCOMP_SYSTEM_HOOK_DIR_DEFAULT="/etc/stackcomp"
+STACKCOMP_SYSTEM_CONFIG_DIR_DEFAULT="/etc/stackcomp"
+STACKCOMP_SYSTEM_CONFIG_FILE_DEFAULT="/etc/stackcomp/stackcomp.conf"
+STACKCOMP_BIN_DEFAULT="stackcomp"
 
 # Capture one caller-provided value so sourced environment files cannot silently
 # override the highest-priority layer.
@@ -53,8 +39,8 @@ for var_name in \
     WAYLAND_DEBUG WLR_LOGTS _JAVA_AWT_WM_NONREPARENTING WMNAME \
     STACKCOMP_X11 STACKCOMP_X11_DISPLAY STACKCOMP_DBG STACKCOMP_CONFIG \
     STACKCOMP_LOG_DIR STACKCOMP_SYSTEM_HOOK_DIR STACKCOMP_SYSTEM_CONFIG_DIR \
-    STACKCOMP_SYSTEM_CONFIG_FILE STACKCOMP_BIN STACKCOMP_DEBUG_XDG XKB_DEFAULT_LAYOUT \
-    XKB_DEFAULT_MODEL XKB_DEFAULT_VARIANT XKB_DEFAULT_OPTIONS
+    STACKCOMP_SYSTEM_CONFIG_FILE STACKCOMP_BIN STACKCOMP_DEBUG_XDG \
+    XKB_DEFAULT_LAYOUT XKB_DEFAULT_MODEL XKB_DEFAULT_VARIANT XKB_DEFAULT_OPTIONS
 do
     stackcomp_capture_caller_override "$var_name"
 done
@@ -83,8 +69,8 @@ for var_name in \
     WAYLAND_DEBUG WLR_LOGTS _JAVA_AWT_WM_NONREPARENTING WMNAME \
     STACKCOMP_X11 STACKCOMP_X11_DISPLAY STACKCOMP_DBG STACKCOMP_CONFIG \
     STACKCOMP_LOG_DIR STACKCOMP_SYSTEM_HOOK_DIR STACKCOMP_SYSTEM_CONFIG_DIR \
-    STACKCOMP_SYSTEM_CONFIG_FILE STACKCOMP_BIN STACKCOMP_DEBUG_XDG XKB_DEFAULT_LAYOUT \
-    XKB_DEFAULT_MODEL XKB_DEFAULT_VARIANT XKB_DEFAULT_OPTIONS
+    STACKCOMP_SYSTEM_CONFIG_FILE STACKCOMP_BIN STACKCOMP_DEBUG_XDG \
+    XKB_DEFAULT_LAYOUT XKB_DEFAULT_MODEL XKB_DEFAULT_VARIANT XKB_DEFAULT_OPTIONS
 do
     stackcomp_restore_caller_override "$var_name"
 done
@@ -147,7 +133,7 @@ if [ -n "${STACKCOMP_DEBUG_XDG+x}" ]; then export STACKCOMP_DEBUG_XDG; fi
 
 # Load shared helper functions before first use.
 # ==============================================================================
-. "$COMP_ROOT_DIR/scripts/shell-helpers.sh"
+. "$STACKCOMP_HELPER_LIB"
 
 
 # Path Definitions and Log Setup
@@ -198,7 +184,7 @@ STACKCOMP_USER_STARTUP_HOOK_CMD="$(stackcomp_config_hook_from_file startup "$CON
 STACKCOMP_USER_SHUTDOWN_HOOK_CMD="$(stackcomp_config_hook_from_file shutdown "$CONFIG_FILE")"
 STACKCOMP_USER_RELOAD_HOOK_CMD="$(stackcomp_config_hook_from_file reload "$CONFIG_FILE")"
 # Exporting empty values is intentional here: the managed scripts then fall
-# back to the XDG hook locations instead of guessing from repository paths.
+# back to the XDG hook locations instead of guessing from unrelated paths.
 export STACKCOMP_USER_STARTUP_HOOK_CMD
 export STACKCOMP_USER_SHUTDOWN_HOOK_CMD
 export STACKCOMP_USER_RELOAD_HOOK_CMD
@@ -230,7 +216,7 @@ if choose_reachable_x11_display; then
     export STACKCOMP_SESSION_MODE=nested
     SESSION_MODE_NOTE="nested-x11"
     echo "Starting in Nested-Mode under X11 (DISPLAY=$CHOSEN_X11_DISPLAY)..."
-elif [ -n "$WAYLAND_DISPLAY" ]; then
+elif [ -n "${WAYLAND_DISPLAY:-}" ]; then
     # Wayland session: use "wayland-nested" to avoid socket collisions.
     export WLR_BACKENDS=wayland
     export WLR_WL_SOCKET="wayland-nested"
@@ -239,7 +225,7 @@ elif [ -n "$WAYLAND_DISPLAY" ]; then
     echo "Starting in Nested-Mode under Wayland..."
 else
     # Console (TTY) or unreachable nested displays: run native backend stack.
-    if [ -n "$DISPLAY" ]; then
+    if [ -n "${DISPLAY:-}" ]; then
         echo "DISPLAY=$DISPLAY is unreachable and no WAYLAND_DISPLAY found; falling back to native backend."
     fi
     unset DISPLAY
@@ -349,14 +335,14 @@ log_startup INFO "Builtin fallback enabled:     ${STACKCOMP_ALLOW_BUILTIN_FALLBA
 log_startup INFO "Managed hooks enabled:        $STACKCOMP_MANAGED_HOOKS"
 log_startup INFO "Managed hook directory:       $STACKCOMP_SYSTEM_HOOK_DIR"
 log_startup INFO "Managed config directory:     $STACKCOMP_SYSTEM_CONFIG_DIR"
+log_startup INFO "Compositor binary:            $STACKCOMP_BIN"
 log_startup INFO "WLR_BACKENDS:                 $WLR_BACKENDS..."
-log_startup INFO "WLR_WL_SOCKET:                $WLR_WL_SOCKET"
+log_startup INFO "WLR_WL_SOCKET:                ${WLR_WL_SOCKET:-unset}"
 log_startup INFO "STACKCOMP_DBG:                $STACKCOMP_DBG"
 log_startup INFO "STACKCOMP_LOG_LEVEL:          $STACKCOMP_LOG_LEVEL"
 log_startup INFO "Crash handler enabled:        $STACKCOMP_ENABLE_CRASH_HANDLER"
 log_startup INFO "STACKCOMP_X11:                $STACKCOMP_X11"
 log_startup INFO "STACKCOMP_X11_DISPLAY:        ${STACKCOMP_X11_DISPLAY:-auto (:2..:99)}"
-log_startup INFO "Compositor binary:            $STACKCOMP_BIN"
 log_startup INFO "Log file path:                $LOG_FILE"
 log_startup INFO "Crash log file path:          $CRASH_LOG_FILE"
 log_startup INFO "Startup log file:             $STACKCOMP_STARTUP_LOG_FILE"
@@ -436,7 +422,7 @@ if [ "$EXIT_CODE" -ne 0 ]; then
     log_startup INFO "Compositor exited with rc=$EXIT_CODE; triggering managed shutdown runtime: $system_shutdown_hook"
 
     if [ -f "$system_shutdown_hook" ]; then
-        "$system_shutdown_hook"
+        sh "$system_shutdown_hook"
     else
         log_startup ERROR "Managed shutdown runtime not found at the expected path: $system_shutdown_hook"
     fi
