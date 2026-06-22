@@ -15,6 +15,7 @@ Launcher:     <your_local_repo>/scratch-compositor/testing/stackcomp_run
 Env file:     <your_local_repo>/scratch-compositor/config/environment
 Default cfg:  <your_local_repo>/scratch-compositor/testing/stackcomp.conf
 System startup:  <your_local_repo>/scratch-compositor/scripts/system_startup.sh
+System reload:   <your_local_repo>/scratch-compositor/scripts/system_reload.sh
 System shutdown: <your_local_repo>/scratch-compositor/scripts/system_shutdown.sh
 Portals:      <your_local_repo>/scratch-compositor/config/portals
 Shell tests:  <your_local_repo>/scratch-compositor/tests/test_shell_runtime.sh
@@ -62,6 +63,7 @@ The current automated run covers:
   - `launch`, `launch_nested`, `launch_nokill`
   - nested startup preparation
   - native managed portal startup
+  - managed reload helper behavior
   - managed user hook execution and config hook parsing
   - portal runtime variable logging
   - managed shutdown cleanup
@@ -151,6 +153,22 @@ Check:
 - the startup log shows the launcher entering managed shutdown orchestration
 - the user shutdown hook is either executed or explicitly reported as absent
 - the managed shutdown runtime still runs afterwards
+
+
+D3) Reload hook behavior check
+------------------------------
+Confirm that config reload enters the managed reload runtime and that user
+reload hooks can restart managed components through the helper layer:
+
+  LOG_BASE="${XDG_STATE_HOME:-$HOME/.local/state}/stackcomp"
+  ./build/stackcomp --reload-config
+  rg -n "Starting managed reload hook|Sourcing user reload hook file|Running user reload hook|Managed reload hook completed|Reloading " "$LOG_BASE"/stackcomp*-startup.log
+
+Check:
+- the reload path enters `scripts/system_reload.sh`
+- the configured reload hook is either sourced from config or reported through the normal fallback log line
+- helper-driven restarts such as `reload sfwbar` are visible in the log
+- helper-driven one-shot starts such as `reload_once mutagen` are visible in the log without forcing a restart
 
 
 E) X11 bridge behavior (xwayland-satellite)

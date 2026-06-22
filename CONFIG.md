@@ -74,7 +74,7 @@ A single **`[hooks]`** block may define shell snippets run at lifecycle points. 
 |-----|----------------|
 | **`startup`** / **`on_startup`** | After the compositor has started the backend and set **`WAYLAND_DISPLAY`** (async: stackcomp does not wait for the shell to exit). |
 | **`shutdown`** / **`on_shutdown`** | When the compositor is exiting after a normal session (**after** `wl_display_run` returns). Stackcomp **waits** for this process to exit before tearing down the display. |
-| **`reload`** / **`on_reload`** | After a successful **config reload** (IPC **`reload config`** or **`reload`**, or **`stackcomp --reload-config`**). Runs under the **new** config (async). |
+| **`reload`** / **`on_reload`** | After a successful **config reload** (IPC **`reload config`** or **`reload`**, or **`stackcomp --reload-config`**). Runs under the **new** config (async). In the managed session flow, file-based reload hooks also receive helper functions such as `reload <cmd ...>`. |
 
 If there is no config file path (defaults-only startup) and no default file on disk, **`reload config`** cannot resolve a path and fails with a log message.
 
@@ -229,7 +229,7 @@ These are the current compositor entrypoints for local control. The Wayland-faci
 - **`tile move …`** (same semantics as sort-order actions above)
 - **`scroll …`** or **`scroll move …`** — **`prev`** / **`left`**, **`next`** / **`right`**, or a **signed integer** (viewport steps in scroll layout; no-op if not in scroll layout)
 - **`tile grid …`** (same forms as **`tile_grid_move` `command=`**)
-- **`reload config`** or **`reload`** — re-read the config file (same path as at startup, or the default path), replace keybinds and tile rules, refresh tile layout if applicable, then run the new file’s **`reload`** hook from **`[hooks]`**.
+- **`reload config`** or **`reload`** — re-read the config file (same path as at startup, or the default path), replace keybinds and tile rules, refresh tile layout if applicable, then run the new file’s **`reload`** hook from **`[hooks]`**. In the managed launcher flow this passes through `system_reload.sh` first.
 - **`workspace N`** — switch to workspace **`1`**..**`9`**
 - **`workspace next`** / **`workspace prev`** — cycle workspaces (wraps)
 - **`workspace move N`** — move the focused toplevel to workspace **`N`**

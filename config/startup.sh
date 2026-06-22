@@ -6,6 +6,12 @@
 # The managed runtime provides launch/log helpers before this hook runs.
 ################################################################################
 
+# Helper commands available in this hook:
+# - launch <cmd ...>        Start a managed session component and register it for shutdown cleanup.
+# - launch_nested <cmd ...> Start a managed component only in nested sessions.
+# - launch_nokill <cmd ...> Start a component without adding it to managed shutdown cleanup.
+# - log_startup <lvl> <msg> Write a message into the standard startup log.
+
 # Additional autostart services
 # ==============================================================================
 
@@ -26,6 +32,15 @@
 #     output eDP-1 position 0,0
 #   }
 #launch kanshi
+
+# Full example:
+# log_startup INFO "Starting user startup example components."
+# launch sfwbar
+# launch dunst
+# launch swayidle -w \
+#     timeout 300 'swaylock -f -c 000000' \
+#     timeout 600 'wlopm --off \*' \
+#     resume 'wlopm --on \*'
 
 
 # Session Components

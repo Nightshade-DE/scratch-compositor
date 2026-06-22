@@ -229,12 +229,20 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 ### 6. Introduce the Reload Flow
 
-- [ ] Integrate `reload.sh` into the lifecycle.
-- [ ] Define when `reload` is needed instead of a normal restart.
-- [ ] Separate a managed core reload from optional user reload behavior.
+- [x] Integrate `reload.sh` into the lifecycle.
+- [x] Define when `reload` is needed instead of a normal restart.
+- [x] Separate a managed core reload from optional user reload behavior.
 - [ ] Record examples of reload-relevant components:
-  - [ ] panels such as `sfwbar` or `waybar`
+  - [x] panels such as `sfwbar` or `waybar`
   - [ ] other session components with their own reinitialization needs
+
+- [x] Reload stays bound to the existing IPC/CLI entrypoint:
+  - [x] `reload config` / `reload` inside the running compositor
+  - [x] `stackcomp --reload-config` as the CLI frontend to that path
+- [x] The managed reload flow now uses `scripts/system_reload.sh`.
+- [x] User reload hooks remain config-driven and fall back to `~/.config/stackcomp/reload.sh`.
+- [x] The helper API now includes `reload <cmd ...>` for targeted restarts of managed session components without duplicating shutdown tracker entries.
+- [x] The helper API now includes `reload_once <cmd ...>` for optional extra components that should only be started once during reload.
 
 ### 7. Lock Down Config and Environment Priorities
 

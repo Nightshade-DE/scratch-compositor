@@ -75,6 +75,137 @@ EOF
     trap - EXIT HUP INT TERM
 }
 
+test_reload_helper_restarts_without_duplicate_shutdown_entries() {
+    tmpdir=$(make_tmpdir)
+    trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+    mkdir -p "$tmpdir/bin"
+    cat > "$tmpdir/bin/stdbuf" <<'EOF'
+#!/bin/sh
+shift 2
+"$@"
+EOF
+    cat > "$tmpdir/bin/dummy-service" <<'EOF'
+#!/bin/sh
+printf 'dummy reload output\n'
+EOF
+    chmod +x "$tmpdir/bin/stdbuf" "$tmpdir/bin/dummy-service"
+
+    export PATH="$tmpdir/bin:$PATH"
+    export CURRENT_LOG_FILE="$tmpdir/reload.log"
+    export STACKCOMP_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
+    export PKILL_LOG_FILE="$tmpdir/pkill.log"
+    : > "$CURRENT_LOG_FILE"
+    : > "$STACKCOMP_SHUTDOWN_LIST"
+    : > "$PKILL_LOG_FILE"
+
+    pkill() {
+        printf '%s\n' "$*" >> "$PKILL_LOG_FILE"
+        return 0
+    }
+
+    # shellcheck disable=SC1090
+    . "$repo_root/scripts/shell-helpers.sh"
+
+    launch "$tmpdir/bin/dummy-service"
+    reload "$tmpdir/bin/dummy-service"
+
+    count=$(grep -c '^dummy-service$' "$STACKCOMP_SHUTDOWN_LIST" || true)
+    assert_equals "1" "$count" "reload helper shutdown tracker count"
+    assert_file_contains "$CURRENT_LOG_FILE" "Reloading $tmpdir/bin/dummy-service."
+    assert_file_contains "$CURRENT_LOG_FILE" "Stopped running instance for reload: dummy-service"
+    assert_file_contains "$PKILL_LOG_FILE" "-x dummy-service"
+
+    rm -rf "$tmpdir"
+    trap - EXIT HUP INT TERM
+}
+
+test_reload_once_starts_component_when_missing() {
+    tmpdir=$(make_tmpdir)
+    trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+    mkdir -p "$tmpdir/bin"
+    cat > "$tmpdir/bin/stdbuf" <<'EOF'
+#!/bin/sh
+shift 2
+"$@"
+EOF
+    cat > "$tmpdir/bin/dummy-service" <<'EOF'
+#!/bin/sh
+printf 'dummy reload_once output\n'
+EOF
+    chmod +x "$tmpdir/bin/stdbuf" "$tmpdir/bin/dummy-service"
+
+    export PATH="$tmpdir/bin:$PATH"
+    export CURRENT_LOG_FILE="$tmpdir/reload-once.log"
+    export STACKCOMP_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
+    export PKILL_LOG_FILE="$tmpdir/pkill.log"
+    : > "$CURRENT_LOG_FILE"
+    : > "$STACKCOMP_SHUTDOWN_LIST"
+    : > "$PKILL_LOG_FILE"
+
+    pkill() {
+        printf '%s\n' "$*" >> "$PKILL_LOG_FILE"
+        case "$1" in
+            -0)
+                return 1
+                ;;
+            *)
+                return 0
+                ;;
+        esac
+    }
+
+    # shellcheck disable=SC1090
+    . "$repo_root/scripts/shell-helpers.sh"
+
+    reload_once "$tmpdir/bin/dummy-service"
+
+    count=$(grep -c '^dummy-service$' "$STACKCOMP_SHUTDOWN_LIST" || true)
+    assert_equals "1" "$count" "reload_once shutdown tracker count"
+    assert_file_contains "$CURRENT_LOG_FILE" "Starting component through reload_once: $tmpdir/bin/dummy-service"
+    assert_file_contains "$CURRENT_LOG_FILE" "[reload_once:$tmpdir/bin/dummy-service] dummy reload_once output"
+
+    rm -rf "$tmpdir"
+    trap - EXIT HUP INT TERM
+}
+
+test_reload_once_skips_already_running_component() {
+    tmpdir=$(make_tmpdir)
+    trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+    export CURRENT_LOG_FILE="$tmpdir/reload-once.log"
+    export STACKCOMP_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
+    export PKILL_LOG_FILE="$tmpdir/pkill.log"
+    : > "$CURRENT_LOG_FILE"
+    : > "$STACKCOMP_SHUTDOWN_LIST"
+    : > "$PKILL_LOG_FILE"
+
+    pkill() {
+        printf '%s\n' "$*" >> "$PKILL_LOG_FILE"
+        case "$1" in
+            -0)
+                return 0
+                ;;
+            *)
+                return 0
+                ;;
+        esac
+    }
+
+    # shellcheck disable=SC1090
+    . "$repo_root/scripts/shell-helpers.sh"
+
+    reload_once /usr/bin/mutagen
+
+    count=$(grep -c '^mutagen$' "$STACKCOMP_SHUTDOWN_LIST" || true)
+    assert_equals "1" "$count" "reload_once running tracker count"
+    assert_file_contains "$CURRENT_LOG_FILE" "Skipping reload_once for already running component: mutagen"
+
+    rm -rf "$tmpdir"
+    trap - EXIT HUP INT TERM
+}
+
 test_system_startup_nested_sets_wayland_display() {
     tmpdir=$(make_tmpdir)
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
@@ -92,6 +223,57 @@ test_system_startup_nested_sets_wayland_display() {
 
     assert_equals "wayland-test-socket" "${WAYLAND_DISPLAY:-}" "nested WAYLAND_DISPLAY"
     assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Nested clients use WAYLAND_DISPLAY=wayland-test-socket."
+
+    rm -rf "$tmpdir"
+    trap - EXIT HUP INT TERM
+}
+
+test_system_reload_runs_user_hook_file_with_helpers() {
+    tmpdir=$(make_tmpdir)
+    trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+    cat > "$tmpdir/reload-hook.sh" <<'EOF'
+#!/bin/sh
+reload "$HOOK_SERVICE"
+EOF
+    chmod +x "$tmpdir/reload-hook.sh"
+
+    mkdir -p "$tmpdir/bin"
+    cat > "$tmpdir/bin/stdbuf" <<'EOF'
+#!/bin/sh
+shift 2
+"$@"
+EOF
+    cat > "$tmpdir/bin/dummy-service" <<'EOF'
+#!/bin/sh
+printf 'dummy service reload output\n'
+EOF
+    chmod +x "$tmpdir/bin/stdbuf" "$tmpdir/bin/dummy-service"
+
+    export PATH="$tmpdir/bin:$PATH"
+    export COMP_ROOT_DIR="$repo_root"
+    export STACKCOMP_STARTUP_LOG_FILE="$tmpdir/startup.log"
+    export STACKCOMP_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
+    export STACKCOMP_USER_RELOAD_HOOK_CMD="$tmpdir/reload-hook.sh"
+    export HOOK_SERVICE="$tmpdir/bin/dummy-service"
+    export PKILL_LOG_FILE="$tmpdir/pkill.log"
+    : > "$STACKCOMP_STARTUP_LOG_FILE"
+    : > "$STACKCOMP_SHUTDOWN_LIST"
+    : > "$PKILL_LOG_FILE"
+
+    pkill() {
+        printf '%s\n' "$*" >> "$PKILL_LOG_FILE"
+        return 0
+    }
+
+    # shellcheck disable=SC1090
+    . "$repo_root/scripts/system_reload.sh"
+
+    assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Starting managed reload hook."
+    assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Sourcing user reload hook file from config: $tmpdir/reload-hook.sh"
+    assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Reloading $tmpdir/bin/dummy-service."
+    assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Managed reload hook completed."
+    assert_file_contains "$PKILL_LOG_FILE" "-x dummy-service"
 
     rm -rf "$tmpdir"
     trap - EXIT HUP INT TERM
@@ -273,7 +455,11 @@ test_system_shutdown_cleans_registered_processes() {
 }
 
 test_launch_helpers_track_expected_processes
+test_reload_helper_restarts_without_duplicate_shutdown_entries
+test_reload_once_starts_component_when_missing
+test_reload_once_skips_already_running_component
 test_system_startup_nested_sets_wayland_display
+test_system_reload_runs_user_hook_file_with_helpers
 test_system_startup_native_runs_managed_portals
 test_system_startup_runs_user_hook_command
 test_stackcomp_config_hook_from_file_reads_hooks_section

@@ -60,21 +60,35 @@ stackcomp_session_is_nested() {
     [ "${WLR_BACKENDS:-}" = "x11" ] || [ "${WLR_BACKENDS:-}" = "wayland" ]
 }
 
+# Register one executable basename once for managed shutdown cleanup.
+stackcomp_register_shutdown_program() {
+    prog_name="$1"
+
+    if [ -z "${STACKCOMP_SHUTDOWN_LIST:-}" ]; then
+        return 0
+    fi
+
+    if [ -f "$STACKCOMP_SHUTDOWN_LIST" ] && grep -Fx -- "$prog_name" "$STACKCOMP_SHUTDOWN_LIST" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    printf '%s\n' "$prog_name" >> "$STACKCOMP_SHUTDOWN_LIST"
+}
+
 # Start a service with line-buffered logging. Optionally register it for shutdown.
 launch_logged() {
     register_mode="$1"
     shift
 
     cmd_name="$1"
+    prog_name=$(basename "$cmd_name")
 
     case "$register_mode" in
         register)
             log_startup INFO "Starting $cmd_name (registered for automatic shutdown)."
-            if [ -n "${STACKCOMP_SHUTDOWN_LIST:-}" ]; then
-                # Record only the executable basename so shutdown can match the
-                # process even when the startup command used an absolute path.
-                basename "$cmd_name" >> "$STACKCOMP_SHUTDOWN_LIST"
-            fi
+            # Record only the executable basename so shutdown can match the
+            # process even when the startup command used an absolute path.
+            stackcomp_register_shutdown_program "$prog_name"
             ;;
         skip)
             log_startup INFO "Starting $cmd_name (not registered for shutdown)."
@@ -112,6 +126,49 @@ launch_nested() {
 # Start a service and log output, but do not add it to shutdown cleanup.
 launch_nokill() {
     launch_logged skip "$@"
+}
+
+# Restart one managed session component in-place during the reload hook.
+reload() {
+    cmd_name="$1"
+    prog_name=$(basename "$cmd_name")
+
+    # Reload is intended for the running session lifecycle, where the process
+    # should be replaced and still remain part of managed shutdown tracking.
+    log_message INFO "Reloading $cmd_name."
+
+    if pkill -x "$prog_name" >/dev/null 2>&1; then
+        log_message INFO "Stopped running instance for reload: $prog_name"
+    else
+        log_message INFO "No running instance found for reload: $prog_name"
+    fi
+
+    stackcomp_register_shutdown_program "$prog_name"
+
+    stdbuf -oL -eL "$@" 2>&1 | while IFS= read -r line; do
+        log_message INFO "[reload:$cmd_name] $line"
+    done &
+}
+
+# Start one managed session component during reload only when it is not already running.
+reload_once() {
+    cmd_name="$1"
+    prog_name=$(basename "$cmd_name")
+
+    # This helper exists for reload-time experiments or optional components
+    # that should be brought up once without turning every reload into a restart.
+    if pkill -0 -x "$prog_name" >/dev/null 2>&1; then
+        log_message INFO "Skipping reload_once for already running component: $prog_name"
+        stackcomp_register_shutdown_program "$prog_name"
+        return 0
+    fi
+
+    log_message INFO "Starting component through reload_once: $cmd_name"
+    stackcomp_register_shutdown_program "$prog_name"
+
+    stdbuf -oL -eL "$@" 2>&1 | while IFS= read -r line; do
+        log_message INFO "[reload_once:$cmd_name] $line"
+    done &
 }
 
 # Portal startup helpers
@@ -199,8 +256,28 @@ stackcomp_run_optional_user_hook() {
     hook_kind="$1"
     hook_cmd="$2"
     hook_path="$(stackcomp_user_config_dir)/$hook_kind.sh"
+    hook_cmd_path=""
 
     if [ -n "$hook_cmd" ]; then
+        case "$hook_cmd" in
+            *[\`\$\;\|\&\<\>\(\)\{\}\"\'\ \	]*)
+                hook_cmd_path=""
+                ;;
+            *)
+                # A plain file path should run in the current shell so user
+                # hook files can directly use managed helper functions such as
+                # launch() and reload() without re-sourcing the helper library.
+                hook_cmd_path=$(eval "printf '%s' \"$hook_cmd\"")
+                ;;
+        esac
+
+        if [ -n "$hook_cmd_path" ] && [ -r "$hook_cmd_path" ]; then
+            log_message INFO "Sourcing user $hook_kind hook file from config: $hook_cmd_path"
+            # shellcheck disable=SC1090
+            . "$hook_cmd_path"
+            return $?
+        fi
+
         # Config-provided commands have highest priority because they are the
         # explicit lifecycle contract selected by the active config file.
         log_message INFO "Running user $hook_kind hook from config."

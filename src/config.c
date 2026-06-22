@@ -533,6 +533,13 @@ void comp_config_run_reload(const struct comp_config *cfg) {
 	if (!cfg) {
 		return;
 	}
+	if (managed_hooks_enabled()) {
+		/* Reload keeps the current session alive, so the managed layer only
+		 * provides ordering and helper functions around the user reload hook. */
+		export_managed_hook_env(cfg);
+		spawn_managed_hook("system_reload.sh", false);
+		return;
+	}
 	spawn_sh_c(cfg->hook_reload);
 }
 
