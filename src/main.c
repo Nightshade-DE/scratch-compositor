@@ -4338,6 +4338,7 @@ static void print_usage(const char *argv0) {
 	printf("  --workspace ARG            1..%d|next|prev\n", COMP_WORKSPACE_COUNT);
 	printf("  --workspace-move N         Move focused window to workspace N\n");
 	printf("  --reload-config            Send reload request to running compositor\n");
+	printf("  --allow-builtin-fallback   Start with synthesized config defaults if no file resolves\n");
 	printf("  --ipc                      Keep compatibility; IPC is default-on\n");
 	printf("  --no-ipc                   Disable IPC socket for this instance\n");
 }
@@ -4478,6 +4479,7 @@ int main(int argc, char **argv) {
 	char workspace_move_line[64];
 	bool no_ipc = false;
 	bool reload_config_from_argv = false;
+	bool allow_builtin_fallback = false;
 
 	for (int i = 1; i < argc; i++) {
 		/* Already handled in the early logging pass. */
@@ -4658,10 +4660,17 @@ int main(int argc, char **argv) {
 			no_ipc = true;
 		} else if (!strcmp(argv[i], "--reload-config")) {
 			reload_config_from_argv = true;
+		} else if (!strcmp(argv[i], "--allow-builtin-fallback")) {
+			allow_builtin_fallback = true;
 		} else {
 			wlr_log(WLR_ERROR, "Unknown argument: %s", argv[i]);
 			return 1;
 		}
+	}
+	if (allow_builtin_fallback) {
+		/* Export the choice so the shared config loader and reload path both
+		 * follow the same explicit fallback contract during this process. */
+		setenv("STACKCOMP_ALLOW_BUILTIN_FALLBACK", "1", 1);
 	}
 	if (reload_config_from_argv) {
 		if (ipc_client_send_line("reload config\n") != 0) {
@@ -4719,7 +4728,11 @@ int main(int argc, char **argv) {
 		workspace_from_argv || workspace_move_from_argv) {
 		return 0;
 	}
-	if (!cfg_path && comp_config_default_path(cfg_buf, sizeof(cfg_buf))) {
+	if (!cfg_path) {
+		if (!comp_config_default_path(cfg_buf, sizeof(cfg_buf))) {
+			wlr_log(WLR_ERROR, "No readable config found in user or system locations");
+			return 1;
+		}
 		cfg_path = cfg_buf;
 	}
 

@@ -18,16 +18,75 @@ FILE_DIR=$(dirname "$REAL_SCRIPT_PATH")
 COMP_ROOT_DIR=$(dirname "$FILE_DIR")
 export COMP_ROOT_DIR
 
+# Dev launcher defaults for the "system" layer used inside this repository.
+STACKCOMP_SYSTEM_HOOK_DIR_DEFAULT="$COMP_ROOT_DIR/scripts"
+STACKCOMP_SYSTEM_CONFIG_DIR_DEFAULT="$COMP_ROOT_DIR/config"
+STACKCOMP_SYSTEM_CONFIG_FILE_DEFAULT="$COMP_ROOT_DIR/testing/stackcomp.conf"
 
-# Load environment defaults/overrides.
+# Capture one caller-provided value so sourced environment files cannot silently
+# override the highest-priority layer.
+stackcomp_capture_caller_override() {
+    var_name="$1"
+    if eval "[ \"\${$var_name+x}\" ]"; then
+        eval "STACKCOMP_CALLER_HAS_$var_name=1"
+        eval "STACKCOMP_CALLER_VALUE_$var_name=\${$var_name}"
+    else
+        eval "STACKCOMP_CALLER_HAS_$var_name=0"
+    fi
+}
+
+# Restore one caller-provided value after lower-priority environment files were sourced.
+stackcomp_restore_caller_override() {
+    var_name="$1"
+    if eval "[ \"\${STACKCOMP_CALLER_HAS_$var_name:-0}\" = 1 ]"; then
+        eval "$var_name=\${STACKCOMP_CALLER_VALUE_$var_name}"
+        export "$var_name"
+    fi
+}
+
+
+# Load environment layers.
 # ==============================================================================
-# Override the file path with STACKCOMP_ENV_FILE if needed.
-ENV_FILE="${STACKCOMP_ENV_FILE:-$COMP_ROOT_DIR/config/environment}"
-ENV_FILE_NOTE="defaults-only (no environment file found)"
-if [ -f "$ENV_FILE" ]; then
-    . "$ENV_FILE"
-    ENV_FILE_NOTE="loaded: $ENV_FILE"
+# Preserve caller overrides before lower-priority environment files are sourced.
+for var_name in \
+    WAYLAND_DEBUG WLR_LOGTS _JAVA_AWT_WM_NONREPARENTING WMNAME \
+    STACKCOMP_X11 STACKCOMP_X11_DISPLAY STACKCOMP_DBG STACKCOMP_CONFIG \
+    STACKCOMP_LOG_DIR STACKCOMP_SYSTEM_HOOK_DIR STACKCOMP_SYSTEM_CONFIG_DIR \
+    STACKCOMP_SYSTEM_CONFIG_FILE STACKCOMP_DEBUG_XDG XKB_DEFAULT_LAYOUT \
+    XKB_DEFAULT_MODEL XKB_DEFAULT_VARIANT XKB_DEFAULT_OPTIONS
+do
+    stackcomp_capture_caller_override "$var_name"
+done
+
+SYSTEM_CONFIG_DIR_BOOTSTRAP="${STACKCOMP_SYSTEM_CONFIG_DIR:-$STACKCOMP_SYSTEM_CONFIG_DIR_DEFAULT}"
+SYSTEM_ENV_FILE_DEFAULT="$SYSTEM_CONFIG_DIR_BOOTSTRAP/environment"
+SYSTEM_ENV_FILE="${STACKCOMP_ENV_FILE:-$SYSTEM_ENV_FILE_DEFAULT}"
+USER_ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/stackcomp/environment"
+ENV_FILE_NOTE="defaults-only (no user or system environment file found)"
+
+if [ -f "$SYSTEM_ENV_FILE" ]; then
+    . "$SYSTEM_ENV_FILE"
+    ENV_FILE_NOTE="loaded system environment: $SYSTEM_ENV_FILE"
 fi
+
+if [ -f "$USER_ENV_FILE" ]; then
+    . "$USER_ENV_FILE"
+    if [ "$ENV_FILE_NOTE" = "defaults-only (no user or system environment file found)" ]; then
+        ENV_FILE_NOTE="loaded user environment: $USER_ENV_FILE"
+    else
+        ENV_FILE_NOTE="$ENV_FILE_NOTE; loaded user environment: $USER_ENV_FILE"
+    fi
+fi
+
+for var_name in \
+    WAYLAND_DEBUG WLR_LOGTS _JAVA_AWT_WM_NONREPARENTING WMNAME \
+    STACKCOMP_X11 STACKCOMP_X11_DISPLAY STACKCOMP_DBG STACKCOMP_CONFIG \
+    STACKCOMP_LOG_DIR STACKCOMP_SYSTEM_HOOK_DIR STACKCOMP_SYSTEM_CONFIG_DIR \
+    STACKCOMP_SYSTEM_CONFIG_FILE STACKCOMP_DEBUG_XDG XKB_DEFAULT_LAYOUT \
+    XKB_DEFAULT_MODEL XKB_DEFAULT_VARIANT XKB_DEFAULT_OPTIONS
+do
+    stackcomp_restore_caller_override "$var_name"
+done
 
 # Launcher defaults (single source of truth for release behavior).
 WAYLAND_DEBUG_DEFAULT=0
@@ -37,10 +96,7 @@ WMNAME_DEFAULT=LG3D
 STACKCOMP_X11_DEFAULT=
 STACKCOMP_X11_DISPLAY_DEFAULT=
 STACKCOMP_DBG_DEFAULT=0
-STACKCOMP_CFG_DEFAULT=
 STACKCOMP_LOG_DIR_DEFAULT=
-STACKCOMP_SYSTEM_HOOK_DIR_DEFAULT="$COMP_ROOT_DIR/scripts"
-STACKCOMP_SYSTEM_CONFIG_DIR_DEFAULT="$COMP_ROOT_DIR/config"
 
 # Apply defaults only when unset by caller or environment file.
 if [ -z "${WAYLAND_DEBUG+x}" ]; then WAYLAND_DEBUG="$WAYLAND_DEBUG_DEFAULT"; fi
@@ -50,10 +106,10 @@ if [ -z "${WMNAME+x}" ]; then WMNAME="$WMNAME_DEFAULT"; fi
 if [ -z "${STACKCOMP_X11+x}" ]; then STACKCOMP_X11="$STACKCOMP_X11_DEFAULT"; fi
 if [ -z "${STACKCOMP_X11_DISPLAY+x}" ]; then STACKCOMP_X11_DISPLAY="$STACKCOMP_X11_DISPLAY_DEFAULT"; fi
 if [ -z "${STACKCOMP_DBG+x}" ]; then STACKCOMP_DBG="$STACKCOMP_DBG_DEFAULT"; fi
-if [ -z "${STACKCOMP_CFG+x}" ]; then STACKCOMP_CFG="$STACKCOMP_CFG_DEFAULT"; fi
 if [ -z "${STACKCOMP_LOG_DIR+x}" ]; then STACKCOMP_LOG_DIR="$STACKCOMP_LOG_DIR_DEFAULT"; fi
 if [ -z "${STACKCOMP_SYSTEM_HOOK_DIR+x}" ]; then STACKCOMP_SYSTEM_HOOK_DIR="$STACKCOMP_SYSTEM_HOOK_DIR_DEFAULT"; fi
 if [ -z "${STACKCOMP_SYSTEM_CONFIG_DIR+x}" ]; then STACKCOMP_SYSTEM_CONFIG_DIR="$STACKCOMP_SYSTEM_CONFIG_DIR_DEFAULT"; fi
+if [ -z "${STACKCOMP_SYSTEM_CONFIG_FILE+x}" ]; then STACKCOMP_SYSTEM_CONFIG_FILE="$STACKCOMP_SYSTEM_CONFIG_FILE_DEFAULT"; fi
 
 STACKCOMP_DBG_NOTE=""
 case "$STACKCOMP_DBG" in
@@ -93,18 +149,42 @@ if [ -n "${STACKCOMP_DEBUG_XDG+x}" ]; then export STACKCOMP_DEBUG_XDG; fi
 # Path Definitions and Log Setup
 # ==============================================================================
 # Use XDG state path by default for runtime logs.
-CONFIG_DEFAULT="$COMP_ROOT_DIR/testing/stackcomp.conf"
-if [ -n "$STACKCOMP_CFG" ]; then
-    if [ -r "$STACKCOMP_CFG" ]; then
-        CONFIG_FILE="$STACKCOMP_CFG"
-        CONFIG_NOTE="override from STACKCOMP_CFG"
-    else
-        CONFIG_FILE="$CONFIG_DEFAULT"
-        CONFIG_NOTE="STACKCOMP_CFG not readable, fallback to default"
+CONFIG_NOTE=""
+USER_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/stackcomp/stackcomp.conf"
+
+if [ -n "${STACKCOMP_CONFIG:-}" ]; then
+    if [ ! -r "$STACKCOMP_CONFIG" ]; then
+        printf 'Configured stackcomp config is not readable: %s\n' "$STACKCOMP_CONFIG" >&2
+        exit 1
     fi
+    CONFIG_FILE="$STACKCOMP_CONFIG"
+    if [ -z "$CONFIG_NOTE" ]; then
+        CONFIG_NOTE="override from STACKCOMP_CONFIG"
+    fi
+elif [ -r "$USER_CONFIG_FILE" ]; then
+    CONFIG_FILE="$USER_CONFIG_FILE"
+    CONFIG_NOTE="user config fallback"
+elif [ -r "$STACKCOMP_SYSTEM_CONFIG_FILE" ]; then
+    CONFIG_FILE="$STACKCOMP_SYSTEM_CONFIG_FILE"
+    CONFIG_NOTE="system config fallback"
 else
-    CONFIG_FILE="$CONFIG_DEFAULT"
-    CONFIG_NOTE="default"
+    if stackcomp_env_flag_is_enabled "${STACKCOMP_ALLOW_BUILTIN_FALLBACK:-0}"; then
+        # Reaching this branch means every higher-priority config source has
+        # already failed to resolve: explicit env overrides, user config, and
+        # system config were all checked above. The empty CONFIG_FILE does not
+        # ignore a resolved path; it only signals "let the binary apply its
+        # final builtin fallback step" for the no-config case.
+        CONFIG_FILE=""
+        CONFIG_NOTE="builtin fallback (no readable config file)"
+    else
+        printf 'No readable stackcomp config found in user or system locations.\n' >&2
+        exit 1
+    fi
+fi
+if [ -n "$CONFIG_FILE" ]; then
+    export STACKCOMP_CONFIG="$CONFIG_FILE"
+else
+    unset STACKCOMP_CONFIG
 fi
 
 # Export the user-facing hook commands from the active config so the managed
@@ -261,6 +341,7 @@ log_startup INFO "Environment source:           $ENV_FILE_NOTE"
 log_startup INFO "Selected session mode:        $SESSION_MODE_NOTE"
 log_startup INFO "X11 probe details:            $X11_PROBE_NOTE"
 log_startup INFO "Config file path:             $CONFIG_FILE ($CONFIG_NOTE)"
+log_startup INFO "Builtin fallback enabled:     ${STACKCOMP_ALLOW_BUILTIN_FALLBACK:-0}"
 log_startup INFO "Managed hooks enabled:        $STACKCOMP_MANAGED_HOOKS"
 log_startup INFO "Managed hook directory:       $STACKCOMP_SYSTEM_HOOK_DIR"
 log_startup INFO "Managed config directory:     $STACKCOMP_SYSTEM_CONFIG_DIR"
@@ -295,6 +376,11 @@ if [ "$STACKCOMP_DBG" -ge 1 ]; then
     log_startup INFO "WLR_LOGTS:                    $WLR_LOGTS"
     log_startup INFO "_JAVA_AWT_WM_NONREPARENTING:  $_JAVA_AWT_WM_NONREPARENTING"
     log_startup INFO "WMNAME:                       $WMNAME"
+fi
+
+if stackcomp_env_flag_is_enabled "${STACKCOMP_RESOLVE_ONLY:-0}"; then
+    log_startup INFO "Resolve-only mode requested; skipping compositor start after priority checks."
+    exit 0
 fi
 
 

@@ -135,7 +135,8 @@ The launcher `testing/stackcomp_run` is a convenient way to initialize the compo
 It supports, among others, these runtime options:
 
 - `STACKCOMP_DBG=0|1|2`
-- `STACKCOMP_CFG=/path/to/config`
+- `STACKCOMP_CONFIG=/path/to/config`
+- `STACKCOMP_ALLOW_BUILTIN_FALLBACK=1`
 - `STACKCOMP_X11=0|1`
 - `STACKCOMP_X11_DISPLAY=:12`
 
@@ -143,7 +144,8 @@ Examples:
 
 ```bash
 STACKCOMP_DBG=0 ./testing/stackcomp_run
-STACKCOMP_CFG=/etc/stackcomp/stackcomp.conf STACKCOMP_DBG=1 ./testing/stackcomp_run
+STACKCOMP_CONFIG=/etc/stackcomp/stackcomp.conf STACKCOMP_DBG=1 ./testing/stackcomp_run
+STACKCOMP_ALLOW_BUILTIN_FALLBACK=1 ./testing/stackcomp_run
 ```
 
 For full launcher behavior and all options, see:

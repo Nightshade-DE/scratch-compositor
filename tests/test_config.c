@@ -262,22 +262,39 @@ static int test_invalid_tile_grid_command(void)
 }
 
 /**
- * Missing config file should not hard-fail startup.
- *
- * Loader is expected to synthesize defaults when the file is absent.
+ * Missing config file should hard-fail when an explicit path was requested.
  */
-static int test_missing_config_falls_back_to_defaults(void)
+static int test_missing_config_fails(void)
 {
     struct comp_config *cfg = NULL;
+    unsetenv("STACKCOMP_ALLOW_BUILTIN_FALLBACK");
     bool ok = comp_config_load("/tmp/stackcomp-config-this-file-does-not-exist", &cfg);
+    if (ok)
+    {
+        fprintf(stderr, "missing config should fail instead of falling back silently\n");
+        comp_config_free(cfg);
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * Missing config file may fall back to builtin defaults when explicitly enabled.
+ */
+static int test_missing_config_can_use_builtin_fallback(void)
+{
+    struct comp_config *cfg = NULL;
+    setenv("STACKCOMP_ALLOW_BUILTIN_FALLBACK", "1", 1);
+    bool ok = comp_config_load("/tmp/stackcomp-config-this-file-does-not-exist", &cfg);
+    unsetenv("STACKCOMP_ALLOW_BUILTIN_FALLBACK");
     if (!ok || !cfg)
     {
-        fprintf(stderr, "missing config should fall back to defaults\n");
+        fprintf(stderr, "missing config should use builtin fallback when enabled\n");
         return 1;
     }
     if (cfg->n_binds == 0)
     {
-        fprintf(stderr, "default config should provide built-in binds\n");
+        fprintf(stderr, "builtin fallback should provide default binds\n");
         comp_config_free(cfg);
         return 1;
     }
@@ -296,7 +313,11 @@ int main(void)
     {
         return 1;
     }
-    if (test_missing_config_falls_back_to_defaults() != 0)
+    if (test_missing_config_fails() != 0)
+    {
+        return 1;
+    }
+    if (test_missing_config_can_use_builtin_fallback() != 0)
     {
         return 1;
     }

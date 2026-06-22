@@ -13,11 +13,11 @@ Launcher runtime flow and files are documented in testing/LAUNCHER.md.
 Launcher settings are resolved in this order:
 
 1. Caller environment (for example VAR=value ./testing/stackcomp_run)
-2. STACKCOMP_ENV_FILE (if set and readable)
-3. config/environment (if present)
+2. User environment file (`$XDG_CONFIG_HOME/stackcomp/environment` or `~/.config/stackcomp/environment`)
+3. System environment file (`$STACKCOMP_SYSTEM_CONFIG_DIR/environment`, defaulting to `config/environment` in the dev launcher)
 4. Built-in defaults in testing/stackcomp_run
 
-config/environment is override-oriented. Values can stay commented out.
+If `STACKCOMP_ENV_FILE` is set, it replaces the dev launcher's system environment file path but keeps the same priority level.
 
 ## Launcher Variables
 
@@ -37,12 +37,21 @@ Controls launcher runtime mode:
 
 Invalid values fall back to the launcher default (currently 0) and emit a warning.
 
-### STACKCOMP_CFG
+### STACKCOMP_CONFIG
 
 Optional alternate config file path passed as -c.
 
 - If readable: used directly
-- If not readable: launcher falls back to default config path and logs fallback
+- If not readable: launcher exits with an error
+
+### STACKCOMP_ALLOW_BUILTIN_FALLBACK
+
+Optional compatibility switch for config resolution.
+
+- unset or `0`: missing config is a hard error
+- `1` / `true` / `yes` / `on`: allow synthesized builtin binds when no config file resolves
+
+This mirrors binary CLI flag `--allow-builtin-fallback`.
 
 ### STACKCOMP_X11
 

@@ -330,21 +330,35 @@ static void load_defaults(struct comp_config *cfg) {
 	append_bind(cfg, &b);
 }
 
-/** Build config path candidates from XDG/HOME and return the first readable one. */
+/** Return true when builtin config fallback was explicitly enabled. */
+static bool builtin_config_fallback_enabled(void) {
+	const char *value = getenv("STACKCOMP_ALLOW_BUILTIN_FALLBACK");
+	if (!value || !value[0]) {
+		return false;
+	}
+	return !strcasecmp(value, "1") || !strcasecmp(value, "true") || !strcasecmp(value, "yes") ||
+		   !strcasecmp(value, "on");
+}
+
+/** Build config path candidates from XDG/HOME/system and return the first readable one. */
 bool comp_config_default_path(char *out, size_t out_len) {
 	const char *xdg = getenv("XDG_CONFIG_HOME");
 	if (xdg && xdg[0]) {
-		if (snprintf(out, out_len, "%s/stackcomp/config", xdg) < (int)out_len &&
+		if (snprintf(out, out_len, "%s/stackcomp/stackcomp.conf", xdg) < (int)out_len &&
 			access(out, R_OK) == 0) {
 			return true;
 		}
 	}
 	const char *home = getenv("HOME");
 	if (home && home[0]) {
-		if (snprintf(out, out_len, "%s/.config/stackcomp/config", home) < (int)out_len &&
+		if (snprintf(out, out_len, "%s/.config/stackcomp/stackcomp.conf", home) < (int)out_len &&
 			access(out, R_OK) == 0) {
 			return true;
 		}
+	}
+	if (snprintf(out, out_len, "%s", "/etc/stackcomp/stackcomp.conf") < (int)out_len &&
+		access(out, R_OK) == 0) {
+		return true;
 	}
 	return false;
 }
@@ -1115,12 +1129,20 @@ bool comp_config_load(const char *path, struct comp_config **cfg_out) {
 	}
 	if (!f) {
 		if (path) {
-			wlr_log(WLR_INFO, "No config at %s (%s), using built-in defaults", path,
-					strerror(errno));
+			wlr_log(WLR_ERROR, "Failed to open config at %s (%s)", path, strerror(errno));
+		} else {
+			wlr_log(WLR_ERROR, "No config path resolved");
 		}
-		load_defaults(cfg);
-		*cfg_out = cfg;
-		return true;
+		if (builtin_config_fallback_enabled()) {
+			/* This opt-in exists for recovery and development cases where a
+			 * session should still come up even though no config file resolved. */
+			wlr_log(WLR_INFO, "Builtin config fallback enabled; using synthesized defaults");
+			load_defaults(cfg);
+			*cfg_out = cfg;
+			return true;
+		}
+		comp_config_free(cfg);
+		return false;
 	}
 
 	struct comp_keybind cur = {0};

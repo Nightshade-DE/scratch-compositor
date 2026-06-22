@@ -75,8 +75,8 @@ A) Launcher config model
 ------------------------
 The launcher resolves settings in this order:
 1) Caller environment (one-shot VAR=... ./testing/stackcomp_run)
-2) STACKCOMP_ENV_FILE (if set)
-3) config/environment (if present)
+2) User environment file under `~/.config/stackcomp` / XDG config home
+3) System environment file (`config/environment` in the current dev flow, or `STACKCOMP_ENV_FILE` when set)
 4) Built-in defaults in testing/stackcomp_run
 
 Note:
@@ -194,10 +194,10 @@ F) Config override test
 -----------------------
 Use alternate config without editing launcher:
 
-  STACKCOMP_CFG=/path/to/other.conf ./testing/stackcomp_run
+  STACKCOMP_CONFIG=/path/to/other.conf ./testing/stackcomp_run
 
 Check startup summary line:
-- "Config file path: ... (override from STACKCOMP_CFG)"
+- "Config file path: ... (override from STACKCOMP_CONFIG)"
 
 
 G) Log directory override test
@@ -262,8 +262,9 @@ K) Suggested test sequence
 2) STACKCOMP_DBG=0 ./testing/stackcomp_run (baseline release mode)
 3) STACKCOMP_DBG=1 ./testing/stackcomp_run (release-debug logs)
 4) STACKCOMP_DBG=2 ./testing/stackcomp_run (debug + crash handler)
-5) STACKCOMP_CFG=/path/to/alt.conf ./testing/stackcomp_run
+5) STACKCOMP_CONFIG=/path/to/alt.conf ./testing/stackcomp_run
 6) Optional nested run with STACKCOMP_X11=0 and then STACKCOMP_X11=1
+7) Optional no-config recovery run with STACKCOMP_ALLOW_BUILTIN_FALLBACK=1
 
 
 L) 3-minute smoke check (before push)

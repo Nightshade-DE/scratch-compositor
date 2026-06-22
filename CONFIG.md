@@ -7,20 +7,17 @@ This file documents the **INI-style** configuration read at compositor startup. 
 1. **`stackcomp -c PATH` / `stackcomp --config PATH`** — highest priority when given.
 2. **`$STACKCOMP_CONFIG`** — if set to a readable path.
 3. **Default search** (first file that exists and is readable):
-   - `$XDG_CONFIG_HOME/stackcomp/config`
-   - `~/.config/stackcomp/config`
+   - `$XDG_CONFIG_HOME/stackcomp/stackcomp.conf`
+   - `~/.config/stackcomp/stackcomp.conf`
+   - `/etc/stackcomp/stackcomp.conf`
 
-If no file is found, or the file defines **no** `[bind]` entries, **built-in defaults** are used (Super+Return runs `${TERMINAL:-foot}` via `sh -c`, Super+Shift+Q closes the focused client, Super+Escape quits, Super+t toggles stack/tile layout).
+If no file is found, startup fails with a log message instead of silently continuing without a config. You can opt into the old synthesized-default behavior with **`--allow-builtin-fallback`** or **`STACKCOMP_ALLOW_BUILTIN_FALLBACK=1`**. If the file exists but defines **no** `[bind]` entries, **built-in binds** are still synthesized as a compatibility fallback.
 
 A starting point for your own file is **`stackcomp.conf.example`** in this repository.
 
 ---
 
 ## Launcher environment (stackcomp_run)
-
-Besides CLI `-c/--config` and `$STACKCOMP_CONFIG`, the config path can also be
-selected via launcher environment variable `STACKCOMP_CFG` in
-`testing/stackcomp_run`.
 
 Further launcher details are documented in:
 
@@ -76,7 +73,7 @@ A single **`[hooks]`** block may define shell snippets run at lifecycle points. 
 | **`shutdown`** / **`on_shutdown`** | When the compositor is exiting after a normal session (**after** `wl_display_run` returns). Stackcomp **waits** for this process to exit before tearing down the display. |
 | **`reload`** / **`on_reload`** | After a successful **config reload** (IPC **`reload config`** or **`reload`**, or **`stackcomp --reload-config`**). Runs under the **new** config (async). In the managed session flow, file-based reload hooks also receive helper functions such as `reload <cmd ...>`. |
 
-If there is no config file path (defaults-only startup) and no default file on disk, **`reload config`** cannot resolve a path and fails with a log message.
+If no startup config path can be resolved and no default config file exists, **`reload config`** cannot resolve a path and fails with a log message.
 
 ---
 
@@ -234,7 +231,7 @@ These are the current compositor entrypoints for local control. The Wayland-faci
 - **`workspace next`** / **`workspace prev`** — cycle workspaces (wraps)
 - **`workspace move N`** — move the focused toplevel to workspace **`N`**
 
-The **`stackcomp`** binary also accepts **`--layout`**, **`--scroll`** (same as **`--layout scroll`**), **`--tile-move`**, **`--scroll-move`**, **`--tile-grid`**, **`--workspace`** **`1`**..**`9`** or **`next`** / **`prev`**, **`--workspace-move`** **`N`** (move focused window to workspace **`N`**), and **`--reload-config`** for scripting; see **`COMPOSITOR.md`** for behavior when no compositor is listening.
+The **`stackcomp`** binary also accepts **`--layout`**, **`--scroll`** (same as **`--layout scroll`**), **`--tile-move`**, **`--scroll-move`**, **`--tile-grid`**, **`--workspace`** **`1`**..**`9`** or **`next`** / **`prev`**, **`--workspace-move`** **`N`** (move focused window to workspace **`N`**), **`--reload-config`** for scripting, and **`--allow-builtin-fallback`** to keep the old no-config fallback behavior; see **`COMPOSITOR.md`** for behavior when no compositor is listening.
 
 ---
 

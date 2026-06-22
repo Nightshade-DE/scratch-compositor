@@ -9,8 +9,12 @@
 #   STACKCOMP_DBG=1 -> release debug logging (info-level)
 #   STACKCOMP_DBG=2 -> debug logging + crash handler enabled
 
-# Optional config override path. Empty means launcher default.
-#STACKCOMP_CFG=/etc/stackcomp/stackcomp.conf
+# Optional config override path. Empty means user -> system -> error.
+#STACKCOMP_CONFIG=/etc/stackcomp/stackcomp.conf
+
+# Optional compatibility switch to allow synthesized builtin binds when no
+# config file can be resolved anywhere.
+#STACKCOMP_ALLOW_BUILTIN_FALLBACK=1
 
 # Debug mode selector (0,1,2)
 STACKCOMP_DBG=2

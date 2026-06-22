@@ -412,11 +412,21 @@ run_stackcomp_with_capture() {
     stackcomp_bin="$COMP_ROOT_DIR/build/stackcomp"
     level="${STACKCOMP_LOG_LEVEL:-error}"
     enable_crash="${STACKCOMP_ENABLE_CRASH_HANDLER:-0}"
-
     if [ "$enable_crash" = "1" ]; then
-        "$stackcomp_bin" -c "$CONFIG_FILE" --log-level "$level" --log-file "$LOG_FILE" --crash-log "$CRASH_LOG_FILE" >"$fifo_path" 2>&1
+        if [ -n "${CONFIG_FILE:-}" ]; then
+            "$stackcomp_bin" -c "$CONFIG_FILE" --log-level "$level" --log-file "$LOG_FILE" --crash-log "$CRASH_LOG_FILE" >"$fifo_path" 2>&1
+        else
+            # Omit -c entirely only when the launcher intentionally reached the
+            # no-config builtin fallback path. Any explicit or resolved config
+            # file is still passed through -c above; nothing is ignored here.
+            "$stackcomp_bin" --log-level "$level" --log-file "$LOG_FILE" --crash-log "$CRASH_LOG_FILE" >"$fifo_path" 2>&1
+        fi
     else
-        "$stackcomp_bin" -c "$CONFIG_FILE" --log-level "$level" --log-file "$LOG_FILE" --no-crash-handler >"$fifo_path" 2>&1
+        if [ -n "${CONFIG_FILE:-}" ]; then
+            "$stackcomp_bin" -c "$CONFIG_FILE" --log-level "$level" --log-file "$LOG_FILE" --no-crash-handler >"$fifo_path" 2>&1
+        else
+            "$stackcomp_bin" --log-level "$level" --log-file "$LOG_FILE" --no-crash-handler >"$fifo_path" 2>&1
+        fi
     fi
     cmd_status=$?
 

@@ -98,7 +98,7 @@ Debug + crash handler:
 
 Alternate config path:
 
-  STACKCOMP_CFG=/path/to/other.conf ./testing/stackcomp_run
+  STACKCOMP_CONFIG=/path/to/other.conf ./testing/stackcomp_run
 
 Disable satellite:
 
@@ -111,6 +111,10 @@ Force satellite display:
 Custom log directory:
 
   STACKCOMP_LOG_DIR=/tmp/stackcomp-test ./testing/stackcomp_run
+
+Allow builtin fallback when no config exists:
+
+  STACKCOMP_ALLOW_BUILTIN_FALLBACK=1 ./testing/stackcomp_run
 
 ## Related Docs
 

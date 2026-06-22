@@ -35,6 +35,14 @@ make_tmpdir() {
     mktemp -d "${TMPDIR:-/tmp}/stackcomp-shell-test.XXXXXX"
 }
 
+assert_command_fails() {
+    status=$1
+    label=$2
+    if [ "$status" -eq 0 ]; then
+        fail "$label: expected command failure"
+    fi
+}
+
 test_launch_helpers_track_expected_processes() {
     tmpdir=$(make_tmpdir)
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
@@ -454,6 +462,145 @@ test_system_shutdown_cleans_registered_processes() {
     trap - EXIT HUP INT TERM
 }
 
+test_launcher_resolves_user_config_before_system_fallback() {
+    tmpdir=$(make_tmpdir)
+    trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+    mkdir -p "$tmpdir/user-config/stackcomp" "$tmpdir/system-config" "$tmpdir/state"
+    cat > "$tmpdir/user-config/stackcomp/stackcomp.conf" <<'EOF'
+[bind]
+mods = Super
+key = Return
+action = exec
+command = foot
+EOF
+    cat > "$tmpdir/system-config/config" <<'EOF'
+[bind]
+mods = Super
+key = Q
+action = quit
+EOF
+
+    env -u DISPLAY -u WAYLAND_DISPLAY \
+        XDG_CONFIG_HOME="$tmpdir/user-config" \
+        XDG_STATE_HOME="$tmpdir/state" \
+        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/system-config/config" \
+        STACKCOMP_RESOLVE_ONLY=1 \
+        "$repo_root/testing/stackcomp_run"
+
+    assert_file_contains \
+        "$tmpdir/state/stackcomp/stackcomp-startup.log" \
+        "Config file path:             $tmpdir/user-config/stackcomp/stackcomp.conf (user config fallback)"
+
+    rm -rf "$tmpdir"
+    trap - EXIT HUP INT TERM
+}
+
+test_launcher_uses_system_config_when_user_config_is_missing() {
+    tmpdir=$(make_tmpdir)
+    trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+    mkdir -p "$tmpdir/system-config" "$tmpdir/state" "$tmpdir/empty-config"
+    cat > "$tmpdir/system-config/config" <<'EOF'
+[bind]
+mods = Super
+key = Q
+action = quit
+EOF
+
+    env -u DISPLAY -u WAYLAND_DISPLAY \
+        XDG_CONFIG_HOME="$tmpdir/empty-config" \
+        XDG_STATE_HOME="$tmpdir/state" \
+        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/system-config/config" \
+        STACKCOMP_RESOLVE_ONLY=1 \
+        "$repo_root/testing/stackcomp_run"
+
+    assert_file_contains \
+        "$tmpdir/state/stackcomp/stackcomp-startup.log" \
+        "Config file path:             $tmpdir/system-config/config (system config fallback)"
+
+    rm -rf "$tmpdir"
+    trap - EXIT HUP INT TERM
+}
+
+test_launcher_fails_when_no_config_exists() {
+    tmpdir=$(make_tmpdir)
+    trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+    mkdir -p "$tmpdir/empty-config" "$tmpdir/state"
+    set +e
+    env -u DISPLAY -u WAYLAND_DISPLAY \
+        XDG_CONFIG_HOME="$tmpdir/empty-config" \
+        XDG_STATE_HOME="$tmpdir/state" \
+        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/missing-system-config" \
+        STACKCOMP_RESOLVE_ONLY=1 \
+        "$repo_root/testing/stackcomp_run" >/dev/null 2>"$tmpdir/stderr.log"
+    status=$?
+    set -e
+
+    assert_command_fails "$status" "launcher missing config path"
+    assert_file_contains "$tmpdir/stderr.log" "No readable stackcomp config found in user or system locations."
+
+    rm -rf "$tmpdir"
+    trap - EXIT HUP INT TERM
+}
+
+test_launcher_can_opt_into_builtin_fallback() {
+    tmpdir=$(make_tmpdir)
+    trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+    mkdir -p "$tmpdir/empty-config" "$tmpdir/state"
+    env -u DISPLAY -u WAYLAND_DISPLAY \
+        XDG_CONFIG_HOME="$tmpdir/empty-config" \
+        XDG_STATE_HOME="$tmpdir/state" \
+        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/missing-system-config" \
+        STACKCOMP_ALLOW_BUILTIN_FALLBACK=1 \
+        STACKCOMP_RESOLVE_ONLY=1 \
+        "$repo_root/testing/stackcomp_run"
+
+    assert_file_contains \
+        "$tmpdir/state/stackcomp/stackcomp-startup.log" \
+        "Builtin fallback enabled:     1"
+
+    rm -rf "$tmpdir"
+    trap - EXIT HUP INT TERM
+}
+
+test_launcher_restores_caller_environment_over_file_layers() {
+    tmpdir=$(make_tmpdir)
+    trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+
+    mkdir -p "$tmpdir/user-config/stackcomp" "$tmpdir/system-config" "$tmpdir/state"
+    cat > "$tmpdir/user-config/stackcomp/stackcomp.conf" <<'EOF'
+[bind]
+mods = Super
+key = Return
+action = exec
+command = foot
+EOF
+    cat > "$tmpdir/system-config/environment" <<'EOF'
+STACKCOMP_DBG=0
+EOF
+    cat > "$tmpdir/user-config/stackcomp/environment" <<'EOF'
+STACKCOMP_DBG=1
+EOF
+
+    env -u DISPLAY -u WAYLAND_DISPLAY \
+        XDG_CONFIG_HOME="$tmpdir/user-config" \
+        XDG_STATE_HOME="$tmpdir/state" \
+        STACKCOMP_SYSTEM_CONFIG_DIR="$tmpdir/system-config" \
+        STACKCOMP_RESOLVE_ONLY=1 \
+        STACKCOMP_DBG=2 \
+        "$repo_root/testing/stackcomp_run"
+
+    assert_file_contains \
+        "$tmpdir/state/stackcomp/stackcomp-startup.log" \
+        "STACKCOMP_DBG:                2"
+
+    rm -rf "$tmpdir"
+    trap - EXIT HUP INT TERM
+}
+
 test_launch_helpers_track_expected_processes
 test_reload_helper_restarts_without_duplicate_shutdown_entries
 test_reload_once_starts_component_when_missing
@@ -465,3 +612,8 @@ test_system_startup_runs_user_hook_command
 test_stackcomp_config_hook_from_file_reads_hooks_section
 test_portals_log_effective_runtime_values
 test_system_shutdown_cleans_registered_processes
+test_launcher_resolves_user_config_before_system_fallback
+test_launcher_uses_system_config_when_user_config_is_missing
+test_launcher_fails_when_no_config_exists
+test_launcher_can_opt_into_builtin_fallback
+test_launcher_restores_caller_environment_over_file_layers

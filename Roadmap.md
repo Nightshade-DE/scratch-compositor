@@ -25,7 +25,7 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 - [ ] `/usr/bin/stackcomp` for the binary.
 - [ ] `/usr/bin/<session-wrapper>` for the production session wrapper.
-- [ ] `/etc/stackcomp/config` as base configuration.
+- [ ] `/etc/stackcomp/stackcomp.conf` as base configuration.
 - [ ] `/etc/stackcomp/startup.sh` as the base hook for session components and autostarts.
 - [ ] `/etc/stackcomp/reload.sh` for reload-specific coupling.
 - [ ] `/etc/stackcomp/shutdown.sh` for optional system-wide extra shutdown behavior.
@@ -36,7 +36,7 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 ### User-specific
 
-- [ ] `~/.config/stackcomp/config` as the user override for the base configuration.
+- [ ] `~/.config/stackcomp/stackcomp.conf` as the user override for the base configuration.
 - [ ] `~/.config/stackcomp/startup.sh` for additional user autostarts and session components.
 - [ ] `~/.config/stackcomp/reload.sh` for user reload behavior.
 - [ ] Optional `~/.config/stackcomp/shutdown.sh` for extra user shutdown logic.
@@ -83,7 +83,7 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 - [x] `data/stackcomp.desktop` still starts the binary directly instead of a wrapper.
 - [x] A local `/usr/bin/stackcomp -> testing/stackcomp_run` workaround may already exist and must be treated as transitional.
 - [x] `meson.build` still installs only the binary, the config test, and the session desktop file.
-- [x] The binary config search logic still does not know `/etc/stackcomp/config`.
+- [x] The binary config search logic still does not know `/etc/stackcomp/stackcomp.conf`.
 
 #### Current Branch State after the First Runtime Refactors
 
@@ -111,7 +111,7 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 - [x] Dev-only remains everything explicitly described as a test or developer path.
 - [x] Production must include the pieces that initialize a real session and must stay stably reachable for users.
-- [x] The main stable user-facing files remain `~/.config/stackcomp/config`, `startup.sh`, `reload.sh`, and optional `shutdown.sh` and `environment`.
+- [x] The main stable user-facing files remain `~/.config/stackcomp/stackcomp.conf`, `startup.sh`, `reload.sh`, and optional `shutdown.sh` and `environment`.
 - [x] `shutdown_list.nfo` remains runtime state, not a user-editable file.
 
 ### 2. Target Architecture for Runtime Files and Ownership
@@ -246,19 +246,24 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 ### 7. Lock Down Config and Environment Priorities
 
-- [ ] Define the config priority chain:
-  - [ ] CLI `-c/--config`
-  - [ ] explicit environment variables
-  - [ ] user configuration
-  - [ ] system configuration
-  - [ ] built-in defaults
-- [ ] Define the environment priority chain:
-  - [ ] caller environment
-  - [ ] user environment
-  - [ ] system environment
-  - [ ] wrapper defaults
-- [ ] Decide whether the binary itself should know `/etc/stackcomp/config` or whether the wrapper sets `STACKCOMP_CONFIG`.
-- [ ] Ensure system defaults act as a base and user overrides layer on top.
+- [x] Define the config priority chain:
+  - [x] CLI `-c/--config`
+  - [x] explicit environment variables
+  - [x] user configuration
+  - [x] system configuration
+  - [x] then fail instead of silently starting without a config
+- [x] Define the environment priority chain:
+  - [x] caller environment
+  - [x] user environment
+  - [x] system environment
+  - [x] wrapper defaults
+- [x] Decide whether the binary itself should know `/etc/stackcomp/stackcomp.conf` or whether the wrapper sets `STACKCOMP_CONFIG`.
+- [x] Ensure system defaults act as a base and user overrides layer on top.
+
+- [x] The binary now knows `/etc/stackcomp/stackcomp.conf` as the final default search path.
+- [x] The dev launcher now treats `STACKCOMP_CONFIG` as the canonical config override variable.
+- [x] Missing or unreadable config files now raise an explicit error instead of triggering a silent start without a config.
+- [x] An explicit compatibility switch (`--allow-builtin-fallback` or `STACKCOMP_ALLOW_BUILTIN_FALLBACK=1`) can re-enable the old builtin fallback when needed.
 
 ### 8. Installation Strategy
 
@@ -299,7 +304,7 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 - [ ] Test native sessions through the production wrapper.
 - [ ] Test nested sessions through the production wrapper.
 - [ ] Test display-manager startup through the `.desktop` file.
-- [ ] Test user overrides against `/etc/stackcomp/config`.
+- [ ] Test user overrides against `/etc/stackcomp/stackcomp.conf`.
 - [ ] Test `launch_nested` behavior in a real nested session.
 - [ ] Test `launch_nokill` behavior in a native session.
 - [ ] Test reload scenarios with a panel or similar session component.
