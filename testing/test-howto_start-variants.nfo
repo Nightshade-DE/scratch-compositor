@@ -4,7 +4,8 @@ stackcomp start variants test helper (tty/nested, release/debug, crashdump)
 Purpose
 -------
 Quick runbook for validating launcher behavior in native and nested sessions,
-including environment overrides, release/debug modes, and crash logging paths.
+including environment overrides, managed startup preparation, portal runtime,
+release/debug modes, and crash logging paths.
 
 Key paths
 ---------
@@ -13,6 +14,9 @@ Binary:       <your_local_repo>/scratch-compositor/build/stackcomp
 Launcher:     <your_local_repo>/scratch-compositor/testing/stackcomp_run
 Env file:     <your_local_repo>/scratch-compositor/config/environment
 Default cfg:  <your_local_repo>/scratch-compositor/testing/stackcomp.conf
+Startup prep: <your_local_repo>/scratch-compositor/scripts/prepare_startup.sh
+Portals:      <your_local_repo>/scratch-compositor/config/portals
+Shell tests:  <your_local_repo>/scratch-compositor/tests/test_shell_runtime.sh
 
 Runtime log location
 --------------------
@@ -44,6 +48,22 @@ Pre-checks
 
 3) Optional: verify xwayland-satellite is available:
    command -v xwayland-satellite || echo "xwayland-satellite not in PATH"
+
+4) Run the automated test suite once:
+   meson test -C build --print-errorlogs
+
+
+A0) Automated test scope
+------------------------
+The current automated run covers:
+- config parsing (`tests/test_config.c`)
+- shell runtime contracts (`tests/test_shell_runtime.sh`)
+  - `launch`, `launch_nested`, `launch_nokill`
+  - nested startup preparation
+  - native managed portal startup
+  - portal runtime variable logging
+
+Use this runbook for everything that still needs manual session validation.
 
 
 A) Launcher config model
@@ -83,6 +103,7 @@ Run from a VT/TTY (outside another desktop session):
 Check:
 - startup summary contains session mode native-tty
 - WLR_BACKENDS is drm,libinput
+- startup log includes "Native Wayland mode detected. Starting managed session services."
 - run exits cleanly or emits actionable errors
 
 
@@ -96,7 +117,22 @@ Run from terminal inside existing desktop session:
 Check:
 - startup summary shows nested-x11 or nested-wayland
 - WLR_BACKENDS is x11 or wayland
+- startup log includes "Nested clients use WAYLAND_DISPLAY=..."
 - nested startup/shutdown logs are used
+
+
+D1) Managed portal startup check (native only)
+----------------------------------------------
+Run a native session, then confirm that startup preparation and portal runtime
+were executed before the user session components:
+
+  LOG_BASE="${XDG_STATE_HOME:-$HOME/.local/state}/stackcomp"
+  rg -n "Native Wayland mode detected|Loaded managed portals file|Started xdg-desktop-portal instances|Set portal variables" "$LOG_BASE"/stackcomp-startup.log
+
+Check:
+- managed portal startup is logged only in native sessions
+- the final portal variable line shows the effective runtime values
+- optional user portal overrides appear via "Loaded user portal override" when used
 
 
 E) X11 bridge behavior (xwayland-satellite)
@@ -207,7 +243,7 @@ Run once:
   ls -l "$LOG_BASE"/shutdown_list.nfo
 
 3) Verify shutdown hook path/result:
-  rg -n "Triggering session shutdown script|session cleanup completed|No programs registered to kill|Performing dynamic session cleanup" "$LOG_BASE"/stackcomp*-startup.log "$LOG_BASE"/stackcomp*-shutdown.log
+  rg -n "triggering session shutdown script|Session cleanup completed|No programs registered to kill|Performing dynamic session cleanup|Stopping xdg-desktop-portal processes" "$LOG_BASE"/stackcomp*-startup.log "$LOG_BASE"/stackcomp*-shutdown.log
 
 4) Fast failure scan if start failed:
   rg -n -i "error|failed|crash|segv|signal|backtrace" "$LOG_BASE"/*.log
@@ -224,68 +260,4 @@ xwayland-satellite and display related:
   rg -n "xwayland-satellite|DISPLAY=|WAYLAND_DISPLAY=|No free X display" "$LOG_BASE"/*.log
 
 Shutdown registration/readback hints:
-  rg -n "registered for automatic shutdown|Performing dynamic session cleanup|Sent SIGTERM|forcing SIGKILL|session cleanup completed" "$LOG_BASE"/stackcomp*-startup.log "$LOG_BASE"/stackcomp*-shutdown.log
-
-Bitte jetzt testen
-
-App mit CSD-Titelleiste starten (z. B. GTK/Qt/Java).
-Maximize, Minimize, Close über Buttons testen.
-Danach minimiertes Fenster über Panel/Taskbar wieder aktivieren.
-Wenn noch ein Edge Case bleibt (z. B. weiterhin zu große Maximized-Geometrie bei Reopen), dann schick mir bitte direkt nach einem reproduzierten Lauf diese Ausgaben:
-
-LOG_BASE="${XDG_STATE_HOME:-$HOME/.local/state}/stackcomp"
-rg -n -i "request_maximize|request_minimize|request_fullscreen|maximized|fullscreen|arrange|layer_workarea|geometry|configure" "$LOG_BASE"/stackcomp*.log
-tail -n 250 "$LOG_BASE"/stackcomp*-startup.log
-tail -n 250 "$LOG_BASE"/stackcomp.log
-
-Dann gehe ich auf den zweiten Fix-Schritt für die Restore/Maximize-Geometrie.
-
-LOG_BASE="${XDG_STATE_HOME:-$HOME/.local/state}/stackcomp"
-tail -n 200 "$LOG_BASE"/stackcomp-startup.log
-tail -n 120 "$LOG_BASE"/stackcomp-crash.log
-
-
-N) Manuelle Resize-Checkliste (Kanten/Ecken)
---------------------------------------------
-Diese kurze Checkliste ist fuer den neuen Maus-Resize-Pfad gedacht.
-
-1) Basis-Start
-  - stackcomp normal starten
-  - 2-3 Fenster oeffnen (z. B. Terminal, Browser, LibreOffice)
-  - Erwartung: stabiler Betrieb ohne Hangs
-
-2) Resize-Cursor (8 Zonen)
-  - Maus langsam an: links, rechts, oben, unten,
-    oben-links, oben-rechts, unten-links, unten-rechts
-  - Erwartung: Cursorform passt zur jeweiligen Kante/Ecke
-
-3) Resize-Drag
-  - An jeder Kante/Ecke: Klick+Hold+Ziehen
-  - Erwartung: Fenstergroesse folgt direkt, ohne Spruenge
-
-4) Min-Groesse / Clamp
-  - Fenster sehr klein ziehen
-  - Erwartung: kein negativer/instabiler Zustand, weiterhin bedienbar
-
-5) Move-Regression
-  - Fensterbewegung wie gewohnt testen
-  - Erwartung: Move unveraendert funktionsfaehig
-
-6) Layout-spezifisch pruefen
-  - In tile/scroll: normale tiled Fenster nicht frei edge-resizable (by design)
-  - Tile-float Fenster sollen edge-resizable bleiben
-
-7) Maximize/Normalize + Resize
-  - Maximieren, normalisieren, danach wieder manuell resizen
-  - Erwartung: kein 0,0-Flicker, Geometrie bleibt plausibel
-
-8) Konfig-Wert pruefen
-  - derzeit entfällt (Resize-Rand ist fest im Compositor definiert)
-
-9) Kurzer Regression-Check
-  - scripts/test-nested-smoke.sh build
-  - Erwartung: erfolgreicher Durchlauf
-
-LOG_BASE="${XDG_STATE_HOME:-$HOME/.local/state}/stackcomp"
-rg -n "grab=|resize|cursor|request_set_cursor|button" "$LOG_BASE"/stackcomp*.log > rg_grab.txt
-tail -n 200 "$LOG_BASE"/stackcomp-startup.log > tail_startup.txt
+  rg -n "registered for automatic shutdown|Performing dynamic session cleanup|Sent SIGTERM|Forcing SIGKILL|Session cleanup completed" "$LOG_BASE"/stackcomp*-startup.log "$LOG_BASE"/stackcomp*-shutdown.log

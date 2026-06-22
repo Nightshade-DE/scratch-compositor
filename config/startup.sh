@@ -1,71 +1,13 @@
 #!/bin/sh
 # Main stackcomp startup hook.
-# - Sources shared helpers from scripts/shell-helpers.sh.
-# - Uses log_startup <level> <message> to write to
-#   $STACKCOMP_STARTUP_LOG_FILE.
-# - launch <command> starts a service, logs output, and registers it for shutdown.
-# - launch_nokill <command> starts/logs without shutdown registration.
+# Keep this file focused on user-facing startup content:
+# - Additional autostart services
+# - Session components
+# Managed startup preparation lives in scripts/prepare_startup.sh.
 ################################################################################
 
-# Activate Helper functions for logging and launching services
-# shellcheck disable=SC2034
-CURRENT_LOG_FILE="${STACKCOMP_STARTUP_LOG_FILE:?STACKCOMP_STARTUP_LOG_FILE is not set}"
-. "$COMP_ROOT_DIR/scripts/shell-helpers.sh"
-
-# Nested Mode
-# ==============================================================================
-if [ "$WLR_BACKENDS" = "x11" ] || [ "$WLR_BACKENDS" = "wayland" ]; then
-    log_startup INFO "Nested mode ($WLR_BACKENDS) detected. Starting test clients only."
-
-    # Prefer an explicit socket from the launcher, otherwise keep existing
-    # WAYLAND_DISPLAY, and only then fall back to a known nested default.
-    if [ -n "$WLR_WL_SOCKET" ]; then
-        export WAYLAND_DISPLAY="$WLR_WL_SOCKET"
-    elif [ -z "$WAYLAND_DISPLAY" ]; then
-        export WAYLAND_DISPLAY="wayland-nested"
-    fi
-
-    log_startup INFO "Starting test clients on $WAYLAND_DISPLAY."
-    # ==========================================================================
-    # Optional test clients:
-    # launch alacritty
-    # log_startup INFO "Started alacritty."
-    # ==========================================================================
-    
-    # Exit so native-session services below are not started.
-    exit 0
-fi
-
-
-# Native Mode
-# ==============================================================================
-log_startup INFO "Native Wayland mode detected. Starting autostart services for the main session."
-
-# Portal Services
-# ----------------------------
-# Kill stale instances to avoid leftovers.
-pkill -x "xdg-desktop-portal-wlr|xdg-desktop-portal-gtk|xdg-desktop-portal" 2>/dev/null
-log_startup INFO "Killed stale xdg-desktop-portal instances."
-
-# Start portal services via helper wrappers.
-launch_nokill /usr/libexec/xdg-desktop-portal-wlr
-launch_nokill /usr/libexec/xdg-desktop-portal-gtk
-
-# Wait briefly before starting the main portal.
-sleep 1
-launch_nokill /usr/libexec/xdg-desktop-portal
-log_startup INFO "Started xdg-desktop-portal instances."
-
-# Optional: force GTK portal usage for desktop apps
-export GTK_USE_PORTAL=1
-
-# Qt: prefer Wayland, but allow xcb fallback for apps without Wayland plugin.
-export QT_QPA_PLATFORM="wayland;xcb"
-
-# GTK: prefer Wayland, but keep X11 fallback for apps/toolkits that still expect it.
-export GDK_BACKEND="wayland,x11"
-
-log_startup INFO "Set portal vars (QT_QPA_PLATFORM=wayland;xcb, GDK_BACKEND=wayland,x11, GTK_USE_PORTAL=1)."
+# Load the managed startup preparation before any user-facing session entries.
+. "$COMP_ROOT_DIR/scripts/prepare_startup.sh"
 
 # Additional autostart services
 # ==============================================================================
@@ -76,6 +18,8 @@ log_startup INFO "Set portal vars (QT_QPA_PLATFORM=wayland;xcb, GDK_BACKEND=wayl
 
 # Set background color.
 #launch swaybg -c '#80c3d8'
+#launch_nested swaybg -c '#1e691b'
+
 
 # Configure output mode/position/scale/transform.
 # Use wlr-randr to get output names.

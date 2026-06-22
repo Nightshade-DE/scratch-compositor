@@ -10,7 +10,8 @@
 # - Starts shutdown script only on compositor error exit.
 ################################################################################
 
-# Get the root path of the project
+# Resolve the repository root once so every sourced helper and runtime file
+# can use stable project-relative paths.
 # ==============================================================================
 REAL_SCRIPT_PATH=$(readlink -f "$0")
 FILE_DIR=$(dirname "$REAL_SCRIPT_PATH")
@@ -109,7 +110,7 @@ CORE_LOG_BASELINE=0
 CRASH_LOG_BASELINE=0
 CHOSEN_X11_DISPLAY=""
 
-# Create runtime directories if they do not exist
+# Create runtime directories before any log or state file is touched.
 mkdir -p "$STATE_DIR"
 mkdir -p "$LOG_DIR"
 
@@ -121,12 +122,14 @@ if choose_reachable_x11_display; then
     export DISPLAY="$CHOSEN_X11_DISPLAY"
     export WLR_BACKENDS=x11
     export WLR_WL_SOCKET="wayland-nested"
+    export STACKCOMP_SESSION_MODE=nested
     SESSION_MODE_NOTE="nested-x11"
     echo "Starting in Nested-Mode under X11 (DISPLAY=$CHOSEN_X11_DISPLAY)..."
 elif [ -n "$WAYLAND_DISPLAY" ]; then
     # Wayland session: use "wayland-nested" to avoid socket collisions.
     export WLR_BACKENDS=wayland
     export WLR_WL_SOCKET="wayland-nested"
+    export STACKCOMP_SESSION_MODE=nested
     SESSION_MODE_NOTE="nested-wayland"
     echo "Starting in Nested-Mode under Wayland..."
 else
@@ -137,6 +140,7 @@ else
     unset DISPLAY
     export WLR_BACKENDS=drm,libinput
     unset WLR_WL_SOCKET
+    export STACKCOMP_SESSION_MODE=native
     SESSION_MODE_NOTE="native-tty"
 fi
 
@@ -209,7 +213,7 @@ else
     export STACKCOMP_SHUTDOWN_LOG_FILE="$LOG_DIR/stackcomp-shutdown.log"
 fi
 
-# Activate Helper functions for logging and launching services
+# Point shared logging helpers at the startup log before the first message.
 export CURRENT_LOG_FILE="$STACKCOMP_STARTUP_LOG_FILE"
 
 # Capture per-file baselines so the error summary only scans this run.
@@ -221,7 +225,8 @@ CRASH_LOG_BASELINE=$(line_count_or_zero "$CRASH_LOG_FILE")
 # Dynamic program list shared by startup.sh and shutdown.sh for shutdown cleanup.
 # ==============================================================================
 export STACKCOMP_SHUTDOWN_LIST="$STATE_DIR/shutdown_list.nfo"
-# Clear shutdown list at startup to avoid leftovers from previous sessions
+# Recreate the shutdown tracker on every run so stale entries never survive
+# into the next session.
 : > "$STACKCOMP_SHUTDOWN_LIST"
 log_startup INFO "============================= N E W  S T A R T ================================"
 log_startup INFO "Cleared shutdown list file."
@@ -271,7 +276,8 @@ fi
 
 # Compositor start and monitoring
 # ==============================================================================
-# Start compositor (without exec to get exit code)
+# Run the compositor without exec so the launcher can inspect the exit status
+# and decide whether managed shutdown cleanup is needed.
 if [ "$STACKCOMP_ENABLE_CRASH_HANDLER" -eq 1 ]; then
     CRASH_HANDLER_NOTE="enabled (--crash-log)"
 else
@@ -286,13 +292,13 @@ EXIT_CODE=$?
 if [ $EXIT_CODE -eq 0 ]; then
     log_startup INFO "Compositor exited normally with exit code 0."
 else
-    log_startup ERROR "Compositor crashed or exited with an error! Exit code: $EXIT_CODE"
+    log_startup ERROR "Compositor crashed or exited with an error. Exit code: $EXIT_CODE."
     if [ "$EXIT_CODE" -eq 137 ]; then
         log_startup ERROR "Exit 137 means SIGKILL (often debugger stop, external kill, or OOM killer)."
     fi
     if [ "$STACKCOMP_ENABLE_CRASH_HANDLER" -eq 1 ]; then
         if [ -s "$CRASH_LOG_FILE" ]; then
-            log_startup ERROR "Check the detailed crash log at: $CRASH_LOG_FILE"
+            log_startup ERROR "Check the detailed crash log at: $CRASH_LOG_FILE."
         elif [ -f "$CRASH_LOG_FILE" ]; then
             log_startup INFO "No crash marker recorded in crash log (file exists but is empty): $CRASH_LOG_FILE"
         else
@@ -305,14 +311,15 @@ else
 fi
 
 
-# Automatically trigger the shutdown script
+# Only trigger the managed shutdown script on abnormal exit. A clean exit keeps
+# compositor-owned shutdown hooks in charge of the final teardown.
 # ==============================================================================
 if [ "$EXIT_CODE" -ne 0 ]; then
     log_startup INFO "Compositor exited with rc=$EXIT_CODE; triggering session shutdown script..."
     if [ -f "$COMP_ROOT_DIR/config/shutdown.sh" ]; then
         "$COMP_ROOT_DIR/config/shutdown.sh"
     else
-        log_startup WARN "shutdown.sh not found at expected path!"
+        log_startup WARN "shutdown.sh not found at the expected path."
     fi
 else
     log_startup INFO "Compositor exited cleanly; relying on config shutdown hooks."

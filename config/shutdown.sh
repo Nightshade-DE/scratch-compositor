@@ -18,72 +18,70 @@
 # be written to the shutdown log file defined in $STACKCOMP_SHUTDOWN_LOG_FILE.
 ################################################################################
 
-# Activate Helper functions for logging and launching services
+# Activate helper functions for shutdown logging and shared runtime checks.
 # shellcheck disable=SC2034
 CURRENT_LOG_FILE="${STACKCOMP_SHUTDOWN_LOG_FILE:?STACKCOMP_SHUTDOWN_LOG_FILE is not set}"
 . "$COMP_ROOT_DIR/scripts/shell-helpers.sh"
 
-log_shutdown INFO "Starting session cleanup"
+log_shutdown INFO "Starting session cleanup."
+
+# Stop every process recorded through launch()/launch_nested() and escalate
+# only when a registered process ignores the initial SIGTERM.
+run_registered_shutdown_cleanup() {
+    if [ ! -s "$STACKCOMP_SHUTDOWN_LIST" ]; then
+        log_shutdown INFO "No programs registered to kill."
+        return 0
+    fi
+
+    log_shutdown INFO "Performing dynamic session cleanup."
+
+    # Registered helpers are part of the managed lifecycle in both nested and
+    # native sessions, so shutdown must always process the tracker file.
+    while IFS= read -r prog || [ -n "$prog" ]; do
+        [ -z "$prog" ] && continue
+
+        if pkill -x "$prog" >/dev/null 2>&1; then
+            log_shutdown INFO "Sent SIGTERM to registered process: $prog."
+        fi
+    done < "$STACKCOMP_SHUTDOWN_LIST"
+
+    sleep 1
+
+    while IFS= read -r prog || [ -n "$prog" ]; do
+        [ -z "$prog" ] && continue
+
+        if pkill -0 -x "$prog" >/dev/null 2>&1; then
+            log_shutdown ERROR "$prog did not exit after SIGTERM. Forcing SIGKILL."
+            pkill -9 -x "$prog" 2>/dev/null
+        fi
+    done < "$STACKCOMP_SHUTDOWN_LIST"
+}
 
 # Nested Mode
 # ==============================================================================
-# Are we in X11/Wayland windowed mode? If so, global cleanup steps will be skipped
-# because only test clients were started.
-if [ "$WLR_BACKENDS" = "x11" ] || [ "$WLR_BACKENDS" = "wayland" ]; then
-    log_shutdown INFO "Nested mode ($WLR_BACKENDS) detected. Skipping global component cleanup."
-    
-    # If specific test clients were started in startup.sh
-    # (for example alacritty), they can be terminated explicitly here, e.g. with:
-    # pkill -f "alacritty.*$WAYLAND_DISPLAY"
-    
-    log_shutdown INFO "Session cleanup completed (nested mode)"
+if stackcomp_session_is_nested; then
+    log_shutdown INFO "Nested mode detected. Cleaning registered nested helpers only."
+    run_registered_shutdown_cleanup
+    log_shutdown INFO "Session cleanup completed (nested mode)."
     exit 0
 fi
 
 # Native Mode
 # ==============================================================================
 log_shutdown INFO "Native Wayland mode detected. Performing full session cleanup."
+run_registered_shutdown_cleanup
 
-# Prüfen, ob die Datei existiert und gefüllt ist
-if [ ! -s "$STACKCOMP_SHUTDOWN_LIST" ]; then
-    log_shutdown INFO "No programs registered to kill."
-else
-    log_shutdown INFO "Performing dynamic session cleanup."
+# Portals are native-only runtime plumbing and are not tracked via launch().
+log_shutdown INFO "Stopping xdg-desktop-portal processes."
+pkill -x "xdg-desktop-portal-wlr|xdg-desktop-portal-gtk|xdg-desktop-portal-hyprland|xdg-desktop-portal-gnome|xdg-desktop-portal-kde|xdg-desktop-portal-lxqt|xdg-desktop-portal" 2>/dev/null
 
-    # Sanfter Kill (SIGTERM) über alle registrierten Programme
-    while IFS= read -r prog || [ -n "$prog" ]; do
-        # Leere Zeilen überspringen
-        [ -z "$prog" ] && continue
-        
-        if pkill -x "$prog" >/dev/null 2>&1; then
-            log_shutdown INFO "Sent SIGTERM to dynamically registered: $prog"
-        fi
-    done < "$STACKCOMP_SHUTDOWN_LIST"
-
-    # Portale zusätzlich beenden (falls nicht via launch gestartet)
-    log_shutdown INFO "stopping xdg-desktop-portal processes"
-    pkill -x "xdg-desktop-portal-wlr|xdg-desktop-portal-gtk|xdg-desktop-portal" 2>/dev/null
-
-    # Gentle escalation (SIGTERM -> SIGKILL)
-    sleep 1
-
-    # Harter Nachdruck (SIGKILL)
-    while IFS= read -r prog || [ -n "$prog" ]; do
-        [ -z "$prog" ] && continue
-        
-        if pkill -0 -x "$prog" >/dev/null 2>&1; then
-            log_shutdown ERROR "$prog did not exit after SIGTERM; forcing SIGKILL"
-            pkill -9 -x "$prog" 2>/dev/null
-        fi
-    done < "$STACKCOMP_SHUTDOWN_LIST"
-    
-    # Sicherheitshalber nochmal die Portale prüfen
-    for portal in xdg-desktop-portal-wlr xdg-desktop-portal-gtk xdg-desktop-portal; do
-        if pkill -0 -x "$portal" >/dev/null 2>&1; then
-            pkill -9 -x "$portal" 2>/dev/null
-        fi
-    done
-fi
+for portal in xdg-desktop-portal-wlr xdg-desktop-portal-gtk xdg-desktop-portal-hyprland xdg-desktop-portal-gnome xdg-desktop-portal-kde xdg-desktop-portal-lxqt xdg-desktop-portal; do
+    if pkill -0 -x "$portal" >/dev/null 2>&1; then
+        # The broker/backends are runtime infrastructure. Force-stop leftovers so
+        # the next session can rebuild a clean portal stack.
+        pkill -9 -x "$portal" 2>/dev/null
+    fi
+done
 
 # ==============================================================================
-log_shutdown INFO "session cleanup completed"
+log_shutdown INFO "Session cleanup completed."

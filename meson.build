@@ -21,6 +21,7 @@ wayland_server = dependency('wayland-server')
 xkbcommon = dependency('xkbcommon')
 wayland_protocols = dependency('wayland-protocols', version: '>=1.32')
 wayland_scanner = find_program('wayland-scanner')
+sh_prog = find_program('sh')
 
 xdg_shell_xml = wayland_protocols.get_variable('pkgdatadir') / 'stable/xdg-shell/xdg-shell.xml'
 xdg_shell_server_h = custom_target(
@@ -100,6 +101,11 @@ config_test = executable(
 )
 
 test('config', config_test)
+test(
+  'shell-runtime',
+  sh_prog,
+  args: [files('tests/test_shell_runtime.sh'), meson.project_source_root()],
+)
 
 install_data(
   files('data/stackcomp.desktop'),

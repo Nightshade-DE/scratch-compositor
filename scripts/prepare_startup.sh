@@ -1,0 +1,32 @@
+#!/bin/sh
+# Managed startup preparation for stackcomp startup hooks.
+# - Activates shared startup helpers and logging.
+# - Prepares nested client environment before user services run.
+# - Starts managed portal runtime for native sessions.
+################################################################################
+
+# Activate helper functions for startup logging and managed launch helpers.
+# shellcheck disable=SC2034
+CURRENT_LOG_FILE="${STACKCOMP_STARTUP_LOG_FILE:?STACKCOMP_STARTUP_LOG_FILE is not set}"
+. "$COMP_ROOT_DIR/scripts/shell-helpers.sh"
+
+if stackcomp_session_is_nested; then
+    # Nested helper clients must target the compositor socket selected by the launcher.
+    if [ -n "${WLR_WL_SOCKET:-}" ]; then
+        export WAYLAND_DISPLAY="$WLR_WL_SOCKET"
+    elif [ -z "${WAYLAND_DISPLAY:-}" ]; then
+        export WAYLAND_DISPLAY="wayland-nested"
+    fi
+
+    log_startup INFO "Nested mode detected. Running startup hook with nested helpers."
+    log_startup INFO "Nested clients use WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-unset}."
+else
+    log_startup INFO "Native Wayland mode detected. Starting managed session services."
+    # Treat portal loading failures as a managed runtime error, but keep the
+    # user startup hook alive so session components can still start.
+    if stackcomp_source_portals; then
+        stackcomp_start_portals
+    else
+        log_startup ERROR "Portal startup skipped because portal configuration failed to load."
+    fi
+fi

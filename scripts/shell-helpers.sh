@@ -36,29 +36,110 @@ log_shutdown() {
 # Process launch helpers
 # ==============================================================================
 
-# Start a service, stream output to startup log, and register it for shutdown cleanup.
-launch() {
-    cmd_name="$1"
-    log_startup INFO "starting $cmd_name (registered for automatic shutdown)"
-    
-    # Store basename so shutdown can stop the same executable reliably.
-    if [ -n "$STACKCOMP_SHUTDOWN_LIST" ]; then
-        basename "$cmd_name" >> "$STACKCOMP_SHUTDOWN_LIST"
+# Return success when the compositor runs nested under X11 or Wayland.
+stackcomp_session_is_nested() {
+    # Prefer the launcher-provided mode so hooks do not have to infer runtime
+    # state from backend strings when a more explicit source is available.
+    if [ -n "${STACKCOMP_SESSION_MODE:-}" ]; then
+        [ "$STACKCOMP_SESSION_MODE" = "nested" ]
+        return $?
     fi
+
+    [ "${WLR_BACKENDS:-}" = "x11" ] || [ "${WLR_BACKENDS:-}" = "wayland" ]
+}
+
+# Start a service with line-buffered logging. Optionally register it for shutdown.
+launch_logged() {
+    register_mode="$1"
+    shift
+
+    cmd_name="$1"
+
+    case "$register_mode" in
+        register)
+            log_startup INFO "Starting $cmd_name (registered for automatic shutdown)."
+            if [ -n "${STACKCOMP_SHUTDOWN_LIST:-}" ]; then
+                # Record only the executable basename so shutdown can match the
+                # process even when the startup command used an absolute path.
+                basename "$cmd_name" >> "$STACKCOMP_SHUTDOWN_LIST"
+            fi
+            ;;
+        skip)
+            log_startup INFO "Starting $cmd_name (not registered for shutdown)."
+            ;;
+        *)
+            log_startup ERROR "Internal launch error: unknown register mode '$register_mode'."
+            return 1
+            ;;
+    esac
 
     stdbuf -oL -eL "$@" 2>&1 | while IFS= read -r line; do
         log_startup INFO "[$cmd_name] $line"
     done &
 }
 
+# Start a service, stream output to startup log, and register it for shutdown cleanup.
+launch() {
+    launch_logged register "$@"
+}
+
+# Start a service only for nested sessions and register it for shutdown cleanup.
+launch_nested() {
+    cmd_name="$1"
+
+    if ! stackcomp_session_is_nested; then
+        log_startup INFO "Skipping $cmd_name (launch_nested only runs in nested sessions)."
+        return 0
+    fi
+
+    # Nested startup preparation already selected the compositor socket, so the
+    # helper only needs to enforce the session-mode contract here.
+    launch_logged register "$@"
+}
+
 # Start a service and log output, but do not add it to shutdown cleanup.
 launch_nokill() {
-    cmd_name="$1"
-    log_startup INFO "starting $cmd_name (NOT registered for shutdown)"
+    launch_logged skip "$@"
+}
 
-    stdbuf -oL -eL "$@" 2>&1 | while IFS= read -r line; do
-        log_startup INFO "[$cmd_name] $line"
-    done &
+# Portal startup helpers
+# ==============================================================================
+
+# Return the dev-flow user config directory that can override managed runtime files.
+stackcomp_user_config_dir() {
+    printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/stackcomp"
+}
+
+# Source the managed portal definition and then an optional user override.
+# This keeps portal startup in the runtime layer while still allowing advanced
+# users to replace the implementation in one dedicated file.
+stackcomp_source_portals() {
+    base_portals_file="$COMP_ROOT_DIR/config/portals"
+    user_portals_file="$(stackcomp_user_config_dir)/portals"
+
+    if [ ! -r "$base_portals_file" ]; then
+        log_startup ERROR "Managed portals file is missing or unreadable: $base_portals_file."
+        return 1
+    fi
+
+    # Source the base first so a user override can replace only the function it
+    # cares about instead of having to duplicate unrelated runtime setup.
+    . "$base_portals_file"
+    log_startup INFO "Loaded managed portals file: $base_portals_file."
+
+    if [ -r "$user_portals_file" ]; then
+        # Load the override after the base so a user can replace only the
+        # portal function instead of re-implementing the managed defaults.
+        . "$user_portals_file"
+        log_startup INFO "Loaded user portal override: $user_portals_file."
+    else
+        log_startup INFO "No user portal override found. Using managed portal defaults."
+    fi
+
+    if ! type stackcomp_start_portals >/dev/null 2>&1; then
+        log_startup ERROR "Portal setup did not define stackcomp_start_portals."
+        return 1
+    fi
 }
 
 # Display/session probe helpers
@@ -128,7 +209,7 @@ line_count_or_zero() {
 run_stackcomp_with_capture() {
     fifo_path=$(mktemp -u "$LOG_DIR/stackcomp-output.XXXXXX.fifo") || return 1
     if ! mkfifo "$fifo_path"; then
-        log_startup ERROR "Failed to create output capture FIFO at $fifo_path"
+        log_startup ERROR "Failed to create output capture FIFO at $fifo_path."
         return 1
     fi
 
@@ -161,7 +242,7 @@ dump_recent_error_summary() {
     log_startup INFO "Automatic error summary (current run only)"
 
     summary_tmp=$(mktemp "$LOG_DIR/stackcomp-error-summary.XXXXXX") || {
-        log_startup ERROR "summary-skip: failed to create temporary summary file"
+        log_startup ERROR "Summary skipped: failed to create temporary summary file."
         return
     }
 
@@ -171,12 +252,12 @@ dump_recent_error_summary() {
         f=${pair%%:*}
         baseline=${pair##*:}
         if [ ! -f "$f" ]; then
-            log_startup INFO "summary-skip: file not found: $f"
+            log_startup INFO "Summary skipped: file not found: $f."
             continue
         fi
 
         start_line=$((baseline + 1))
-        log_startup INFO "summary-source: $f (from line $start_line)"
+        log_startup INFO "Summary source: $f (from line $start_line)."
         if command -v rg >/dev/null 2>&1; then
             matches=$(tail -n +"$start_line" "$f" 2>/dev/null | rg -n -i "$pattern" 2>/dev/null | tail -n 60)
         else
@@ -186,14 +267,14 @@ dump_recent_error_summary() {
         if [ -n "$matches" ]; then
             printf '%s\n' "$matches" >> "$summary_tmp"
         else
-            log_startup INFO "summary-source had no matching lines: $f"
+            log_startup INFO "Summary source had no matching lines: $f."
         fi
     done
 
     if [ -s "$summary_tmp" ]; then
         awk '!seen[$0]++' "$summary_tmp" | sed 's/^/[error-scan] /' | tee -a "$STACKCOMP_STARTUP_LOG_FILE"
     else
-        log_startup INFO "summary had no matching lines in current run"
+        log_startup INFO "Summary had no matching lines in the current run."
     fi
     rm -f "$summary_tmp"
 }
