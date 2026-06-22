@@ -1,7 +1,7 @@
-# Stackcomp Environment Guide
+# Morph Environment Guide
 
 This document describes runtime environment variables used by
-testing/stackcomp_run and passed to stackcomp.
+testing/morph_run and passed to morph.
 
 ## Scope
 
@@ -12,16 +12,16 @@ Launcher runtime flow and files are documented in testing/LAUNCHER.md.
 
 Launcher settings are resolved in this order:
 
-1. Caller environment (for example VAR=value ./testing/stackcomp_run)
-2. User environment file (`$XDG_CONFIG_HOME/stackcomp/environment` or `~/.config/stackcomp/environment`)
-3. System environment file (`$STACKCOMP_SYSTEM_CONFIG_DIR/environment`, defaulting to `config/environment` in the dev launcher)
-4. Built-in defaults in testing/stackcomp_run
+1. Caller environment (for example VAR=value ./testing/morph_run)
+2. User environment file (`$XDG_CONFIG_HOME/morph/environment` or `~/.config/morph/environment`)
+3. System environment file (`$MORPH_SYSTEM_CONFIG_DIR/environment`, defaulting to `config/environment` in the dev launcher)
+4. Built-in defaults in testing/morph_run
 
-If `STACKCOMP_ENV_FILE` is set, it replaces the dev launcher's system environment file path but keeps the same priority level.
+If `MORPH_ENV_FILE` is set, it replaces the dev launcher's system environment file path but keeps the same priority level.
 
 ## Launcher Variables
 
-### STACKCOMP_DBG
+### MORPH_DBG
 
 Controls launcher runtime mode:
 
@@ -37,14 +37,14 @@ Controls launcher runtime mode:
 
 Invalid values fall back to the launcher default (currently 0) and emit a warning.
 
-### STACKCOMP_CONFIG
+### MORPH_CONFIG
 
 Optional alternate config file path passed as -c.
 
 - If readable: used directly
 - If not readable: launcher exits with an error
 
-### STACKCOMP_ALLOW_BUILTIN_FALLBACK
+### MORPH_ALLOW_BUILTIN_FALLBACK
 
 Optional compatibility switch for config resolution.
 
@@ -53,7 +53,7 @@ Optional compatibility switch for config resolution.
 
 This mirrors binary CLI flag `--allow-builtin-fallback`.
 
-### STACKCOMP_X11
+### MORPH_X11
 
 Controls xwayland-satellite startup in compositor:
 
@@ -65,32 +65,32 @@ If unset, launcher applies session-aware defaults:
 - nested backends (x11/wayland): default 0
 - native backend (drm,libinput): default 1
 
-### STACKCOMP_X11_DISPLAY
+### MORPH_X11_DISPLAY
 
 Optional forced display number for satellite, for example :12.
 
-### STACKCOMP_LOG_DIR
+### MORPH_LOG_DIR
 
 Optional runtime log directory override.
 
 Default if unset:
 
-- $XDG_STATE_HOME/stackcomp
-- fallback: ~/.local/state/stackcomp
+- $XDG_STATE_HOME/morph
+- fallback: ~/.local/state/morph
 
 Note:
 
-- The stackcomp suffix is a fixed project runtime namespace.
+- The morph suffix is a fixed project runtime namespace.
 - It does not depend on launcher install path or binary name.
 
-### STACKCOMP_ENV_FILE
+### MORPH_ENV_FILE
 
 Optional path to environment override file.
 If set and readable, it is sourced before launcher defaults are applied.
 
-### STACKCOMP_DEBUG_XDG
+### MORPH_DEBUG_XDG
 
-Optional verbose XDG lifecycle debug flag forwarded to stackcomp.
+Optional verbose XDG lifecycle debug flag forwarded to morph.
 
 - unset or `0`: disabled
 - non-empty and not `0`: enabled
@@ -99,7 +99,7 @@ Use this when debugging early xdg_toplevel requests/state transitions.
 
 ## XKB Variables
 
-These variables are read by stackcomp keyboard initialization via getenv().
+These variables are read by morph keyboard initialization via getenv().
 The launcher does not parse them; it only sources config/environment.
 
 - XKB_DEFAULT_LAYOUT
@@ -117,7 +117,7 @@ Example:
 ```bash
 XKB_DEFAULT_LAYOUT=de,us \
 XKB_DEFAULT_OPTIONS=grp:alt_shift_toggle \
-./testing/stackcomp_run
+./testing/morph_run
 ```
 
 ## Practical Keyboard Test

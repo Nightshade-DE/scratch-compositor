@@ -249,15 +249,15 @@ static void toplevel_arrange_tile(struct comp_toplevel *v, int layout_x, int lay
 
 /** True after `wlr_backend_start` so shutdown hook runs only for a real session. */
 static bool compositor_session_active;
-/** Verbose XDG lifecycle logs (off by default). Enable with `STACKCOMP_DEBUG_XDG=1`. */
+/** Verbose XDG lifecycle logs (off by default). Enable with `MORPH_DEBUG_XDG=1`. */
 static bool xdg_debug_logs_enabled;
 /** Optional append-only log target set by `--log-file`; NULL means stderr-only. */
-static FILE *stackcomp_log_file;
+static FILE *morph_log_file;
 /** Active startup log threshold used by our callback for explicit filtering. */
-static enum wlr_log_importance stackcomp_active_log_level = WLR_INFO;
+static enum wlr_log_importance morph_active_log_level = WLR_INFO;
 
 /** Map wlroots importance to an ordered rank for deterministic threshold checks. */
-static int stackcomp_log_level_rank(enum wlr_log_importance importance) {
+static int morph_log_level_rank(enum wlr_log_importance importance) {
 	switch (importance) {
 	case WLR_ERROR:
 		return 1;
@@ -272,15 +272,15 @@ static int stackcomp_log_level_rank(enum wlr_log_importance importance) {
 }
 
 /** Close the optional startup log file (registered via atexit). */
-static void stackcomp_log_close_file(void) {
-	if (stackcomp_log_file) {
-		fclose(stackcomp_log_file);
-		stackcomp_log_file = NULL;
+static void morph_log_close_file(void) {
+	if (morph_log_file) {
+		fclose(morph_log_file);
+		morph_log_file = NULL;
 	}
 }
 
 /** Map wlroots log importance to a short stable label used in our log prefix. */
-static const char *stackcomp_log_level_name(enum wlr_log_importance importance) {
+static const char *morph_log_level_name(enum wlr_log_importance importance) {
 	switch (importance) {
 	case WLR_ERROR:
 		return "ERROR";
@@ -300,9 +300,9 @@ static const char *stackcomp_log_level_name(enum wlr_log_importance importance) 
  * The callback is invoked with a single `va_list`; we must copy it before each
  * sink write because consuming a `va_list` is destructive.
  */
-static void stackcomp_log_callback(enum wlr_log_importance importance, const char *fmt, va_list args) {
-	const int active = stackcomp_log_level_rank(stackcomp_active_log_level);
-	const int msg = stackcomp_log_level_rank(importance);
+static void morph_log_callback(enum wlr_log_importance importance, const char *fmt, va_list args) {
+	const int active = morph_log_level_rank(morph_active_log_level);
+	const int msg = morph_log_level_rank(importance);
 	if (active == 0 || msg > active) {
 		return;
 	}
@@ -313,7 +313,7 @@ static void stackcomp_log_callback(enum wlr_log_importance importance, const cha
 	if (localtime_r(&now, &tm_now)) {
 		strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &tm_now);
 	}
-	const char *lvl = stackcomp_log_level_name(importance);
+	const char *lvl = morph_log_level_name(importance);
 
 	/* First sink: stderr, always active for local debugging and systemd journals. */
 	va_list a_stderr;
@@ -328,25 +328,25 @@ static void stackcomp_log_callback(enum wlr_log_importance importance, const cha
 	fflush(stderr);
 	va_end(a_stderr);
 
-	if (!stackcomp_log_file) {
+	if (!morph_log_file) {
 		return;
 	}
 	/* Second sink: user-selected file path from `--log-file`. */
 	va_list a_file;
 	va_copy(a_file, args);
 	if (ts[0]) {
-		fprintf(stackcomp_log_file, "[%s] %s: ", ts, lvl);
+		fprintf(morph_log_file, "[%s] %s: ", ts, lvl);
 	} else {
-		fprintf(stackcomp_log_file, "%s: ", lvl);
+		fprintf(morph_log_file, "%s: ", lvl);
 	}
-	vfprintf(stackcomp_log_file, fmt, a_file);
-	fputc('\n', stackcomp_log_file);
-	fflush(stackcomp_log_file);
+	vfprintf(morph_log_file, fmt, a_file);
+	fputc('\n', morph_log_file);
+	fflush(morph_log_file);
 	va_end(a_file);
 }
 
 /** Parse user-facing log level tokens into wlroots importance values. */
-static bool stackcomp_parse_log_level(const char *s, enum wlr_log_importance *out) {
+static bool morph_parse_log_level(const char *s, enum wlr_log_importance *out) {
 	if (!s || !out) {
 		return false;
 	}
@@ -1662,15 +1662,15 @@ static int x11_display_pick_free(void) {
 	return -1;
 }
 
-/** Disable with STACKCOMP_X11=0. Override display with STACKCOMP_X11_DISPLAY (e.g. :12). */
+/** Disable with MORPH_X11=0. Override display with MORPH_X11_DISPLAY (e.g. :12). */
 static void spawn_xwayland_satellite(const char *wayland_display) {
-	const char *disable = getenv("STACKCOMP_X11");
+	const char *disable = getenv("MORPH_X11");
 	if (disable && disable[0] && strcmp(disable, "0") == 0) {
 		return;
 	}
 
 	static char display_buf[16];
-	const char *disp = getenv("STACKCOMP_X11_DISPLAY");
+	const char *disp = getenv("MORPH_X11_DISPLAY");
 	if (!disp || !disp[0]) {
 		const int n = x11_display_pick_free();
 		if (n < 0) {
@@ -2624,14 +2624,14 @@ static bool ipc_socket_path(char *out, size_t out_sz) {
 	if (!rt || !rt[0]) {
 		return false;
 	}
-	const int n = snprintf(out, out_sz, "%s/stackcomp-ipc.sock", rt);
+	const int n = snprintf(out, out_sz, "%s/morph-ipc.sock", rt);
 	if (n < 0 || (size_t)n >= out_sz) {
 		return false;
 	}
 	return true;
 }
 
-/* Returns 0 if the line was delivered to a listening stackcomp, -1 otherwise. */
+/* Returns 0 if the line was delivered to a listening morph, -1 otherwise. */
 static int ipc_client_send_line(const char *line) {
 	char path[108];
 	if (!ipc_socket_path(path, sizeof(path))) {
@@ -2959,7 +2959,7 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data) {
 
 	const bool pressed = event->state == WL_KEYBOARD_KEY_STATE_PRESSED;
 	if (pressed) {
-		const char *kdbg = getenv("STACKCOMP_LOG_KEYS");
+		const char *kdbg = getenv("MORPH_LOG_KEYS");
 		if (kdbg && kdbg[0] && strcmp(kdbg, "0") != 0 && sym != XKB_KEY_NoSymbol) {
 			char name[128];
 			if (xkb_keysym_get_name(sym, name, sizeof(name)) < 0) {
@@ -4311,7 +4311,7 @@ static void server_finish(struct comp_server *server) {
 
 /** Print command-line usage and available startup/IPC flags. */
 static void print_usage(const char *argv0) {
-	const char *prog = (argv0 && argv0[0]) ? argv0 : "stackcomp";
+	const char *prog = (argv0 && argv0[0]) ? argv0 : "morph";
 	printf("Usage: %s [options]\n", prog);
 	printf("\n");
 	printf("General:\n");
@@ -4374,7 +4374,7 @@ int main(int argc, char **argv) {
 				return 1;
 			}
 			enum wlr_log_importance lvl;
-			if (!stackcomp_parse_log_level(argv[i + 1], &lvl)) {
+			if (!morph_parse_log_level(argv[i + 1], &lvl)) {
 				fprintf(stderr,
 						"Unknown --log-level %s (use silent, error, info, debug)\n",
 						argv[i + 1]);
@@ -4386,7 +4386,7 @@ int main(int argc, char **argv) {
 		}
 		if (!strncmp(argv[i], "--log-level=", 12)) {
 			enum wlr_log_importance lvl;
-			if (!stackcomp_parse_log_level(argv[i] + 12, &lvl)) {
+			if (!morph_parse_log_level(argv[i] + 12, &lvl)) {
 				fprintf(stderr,
 						"Unknown --log-level %s (use silent, error, info, debug)\n",
 						argv[i] + 12);
@@ -4433,20 +4433,20 @@ int main(int argc, char **argv) {
 
 	if (startup_log_file_path && startup_log_file_path[0]) {
 		/* Append and line-buffer: readable during live sessions without full buffering delay. */
-		stackcomp_log_file = fopen(startup_log_file_path, "a");
-		if (!stackcomp_log_file) {
+		morph_log_file = fopen(startup_log_file_path, "a");
+		if (!morph_log_file) {
 			fprintf(stderr, "Failed to open --log-file %s: %s\n", startup_log_file_path,
 					strerror(errno));
 			return 1;
 		}
-		setvbuf(stackcomp_log_file, NULL, _IOLBF, 0);
-		(void)atexit(stackcomp_log_close_file);
+		setvbuf(morph_log_file, NULL, _IOLBF, 0);
+		(void)atexit(morph_log_close_file);
 	}
 
-	wlr_log_init(startup_log_level, stackcomp_log_callback);
-	stackcomp_active_log_level = startup_log_level;
+	wlr_log_init(startup_log_level, morph_log_callback);
+	morph_active_log_level = startup_log_level;
 	{
-		const char *e = getenv("STACKCOMP_DEBUG_XDG");
+		const char *e = getenv("MORPH_DEBUG_XDG");
 		xdg_debug_logs_enabled = e && e[0] && strcmp(e, "0") != 0;
 	}
 	/*
@@ -4458,12 +4458,12 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	if (!disable_crash_handler && !stackcomp_crash_handler_install(startup_crash_log_path)) {
+	if (!disable_crash_handler && !morph_crash_handler_install(startup_crash_log_path)) {
 		wlr_log(WLR_ERROR, "Failed to install crash handler");
 		return 1;
 	}
 
-	const char *cfg_path = getenv("STACKCOMP_CONFIG");
+	const char *cfg_path = getenv("MORPH_CONFIG");
 	char cfg_buf[PATH_MAX];
 	enum comp_layout initial_layout = COMP_LAYOUT_STACK;
 	bool layout_from_argv = false;
@@ -4670,57 +4670,57 @@ int main(int argc, char **argv) {
 	if (allow_builtin_fallback) {
 		/* Export the choice so the shared config loader and reload path both
 		 * follow the same explicit fallback contract during this process. */
-		setenv("STACKCOMP_ALLOW_BUILTIN_FALLBACK", "1", 1);
+		setenv("MORPH_ALLOW_BUILTIN_FALLBACK", "1", 1);
 	}
 	if (reload_config_from_argv) {
 		if (ipc_client_send_line("reload config\n") != 0) {
-			wlr_log(WLR_ERROR, "No running stackcomp or IPC failed for --reload-config");
+			wlr_log(WLR_ERROR, "No running morph or IPC failed for --reload-config");
 			return 1;
 		}
-		wlr_log(WLR_INFO, "Sent reload config to running stackcomp");
+		wlr_log(WLR_INFO, "Sent reload config to running morph");
 		return 0;
 	}
 	if (tile_move_from_argv) {
 		if (ipc_client_send_line(tile_move_line) != 0) {
-			wlr_log(WLR_ERROR, "No running stackcomp or IPC failed for --tile-move");
+			wlr_log(WLR_ERROR, "No running morph or IPC failed for --tile-move");
 			return 1;
 		}
-		wlr_log(WLR_INFO, "Sent tile move to running stackcomp via IPC");
+		wlr_log(WLR_INFO, "Sent tile move to running morph via IPC");
 	}
 	if (tile_grid_from_argv) {
 		if (ipc_client_send_line(tile_grid_line) != 0) {
-			wlr_log(WLR_ERROR, "No running stackcomp or IPC failed for --tile-grid");
+			wlr_log(WLR_ERROR, "No running morph or IPC failed for --tile-grid");
 			return 1;
 		}
-		wlr_log(WLR_INFO, "Sent tile grid to running stackcomp via IPC");
+		wlr_log(WLR_INFO, "Sent tile grid to running morph via IPC");
 	}
 	if (scroll_move_from_argv) {
 		if (ipc_client_send_line(scroll_move_line) != 0) {
-			wlr_log(WLR_ERROR, "No running stackcomp or IPC failed for --scroll-move");
+			wlr_log(WLR_ERROR, "No running morph or IPC failed for --scroll-move");
 			return 1;
 		}
-		wlr_log(WLR_INFO, "Sent scroll move to running stackcomp via IPC");
+		wlr_log(WLR_INFO, "Sent scroll move to running morph via IPC");
 	}
 	if (workspace_move_from_argv) {
 		if (ipc_client_send_line(workspace_move_line) != 0) {
-			wlr_log(WLR_ERROR, "No running stackcomp or IPC failed for --workspace-move");
+			wlr_log(WLR_ERROR, "No running morph or IPC failed for --workspace-move");
 			return 1;
 		}
-		wlr_log(WLR_INFO, "Sent workspace move to running stackcomp via IPC");
+		wlr_log(WLR_INFO, "Sent workspace move to running morph via IPC");
 	}
 	if (workspace_from_argv) {
 		if (ipc_client_send_line(workspace_line) != 0) {
-			wlr_log(WLR_ERROR, "No running stackcomp or IPC failed for --workspace");
+			wlr_log(WLR_ERROR, "No running morph or IPC failed for --workspace");
 			return 1;
 		}
-		wlr_log(WLR_INFO, "Sent workspace to running stackcomp via IPC");
+		wlr_log(WLR_INFO, "Sent workspace to running morph via IPC");
 	}
 	if (layout_from_argv) {
 		char line[48];
 		const char *layout_word = initial_layout == COMP_LAYOUT_TILE ? "tile" : (initial_layout == COMP_LAYOUT_SCROLL ? "scroll" : "stack");
 		snprintf(line, sizeof(line), "layout %s\n", layout_word);
 		if (ipc_client_send_line(line) == 0) {
-			wlr_log(WLR_INFO, "Applied layout to running stackcomp via IPC");
+			wlr_log(WLR_INFO, "Applied layout to running morph via IPC");
 			return 0;
 		}
 	}

@@ -37,4 +37,4 @@ nested behavior.
    - Ensure `xvfb-run` is installed, or run from an active Wayland/X11 session
 4. Build links locally but runtime fails to start
    - Inspect logs in `build/meson-logs/` and state logs under
-     `${XDG_STATE_HOME:-$HOME/.local/state}/stackcomp`
+     `${XDG_STATE_HOME:-$HOME/.local/state}/morph`

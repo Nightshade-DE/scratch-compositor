@@ -1,4 +1,4 @@
-# Stackcomp (WIP Name)
+# Morph
 A stacking, tiling, and scrolling hybrid compositor built from stratch with WL-Roots
 
 ## Current Features
@@ -33,7 +33,7 @@ See `PROTOCOLS.md` for the exact matrix of implemented and missing globals.
 * \[testing]: testing files for the compositor
 
 # Dependencies
-- `xwayland-satellite` — X11 apps (ATLauncher, etc.) appear as normal XDG windows; started automatically by stackcomp
+- `xwayland-satellite` — X11 apps (ATLauncher, etc.) appear as normal XDG windows; started automatically by morph
 - `xorg-xwayland` — pulled in by xwayland-satellite and is needed for X11 client support.
 
 Debian/Ubuntu quick check:
@@ -45,7 +45,7 @@ apt-cache search xwayland-satellite
 
 If no install candidate is available in your configured repositories, build
 `xwayland-satellite` from source and ensure the resulting binary is in your
-`PATH` before launching stackcomp.
+`PATH` before launching morph.
 
 Minimal runtime check:
 
@@ -53,7 +53,7 @@ Minimal runtime check:
 command -v xwayland-satellite
 ```
 
-Set `STACKCOMP_X11=0` to disable satellite. Display is auto-picked (`:2`..`:99`, first free socket); override with `STACKCOMP_X11_DISPLAY=:12`.
+Set `MORPH_X11=0` to disable satellite. Display is auto-picked (`:2`..`:99`, first free socket); override with `MORPH_X11_DISPLAY=:12`.
 
 Launcher default is session-aware:
 
@@ -65,14 +65,14 @@ Java/X11 apps (e.g. ATLauncher) often need:
 
 ## IPC (Current State)
 
-stackcomp currently has two IPC/control surfaces that are intentionally different:
+morph currently has two IPC/control surfaces that are intentionally different:
 
 1. Local command IPC (text over Unix socket)
 2. Wayland protocol IPC (ext-workspace + foreign-toplevel)
 
 ### 1) Local command IPC (socket)
 
-- Socket path: `$XDG_RUNTIME_DIR/stackcomp-ipc.sock`
+- Socket path: `$XDG_RUNTIME_DIR/morph-ipc.sock`
 - Transport: `AF_UNIX` stream socket
 - Payload: one text command line (newline optional)
 - Scope: local scripts and CLI automation
@@ -89,8 +89,8 @@ Supported command families:
 Example:
 
 ```bash
-echo 'workspace 2' | nc -U "$XDG_RUNTIME_DIR/stackcomp-ipc.sock"
-echo 'layout scroll' | nc -U "$XDG_RUNTIME_DIR/stackcomp-ipc.sock"
+echo 'workspace 2' | nc -U "$XDG_RUNTIME_DIR/morph-ipc.sock"
+echo 'layout scroll' | nc -U "$XDG_RUNTIME_DIR/morph-ipc.sock"
 ```
 
 ### 2) Wayland protocol IPC (client-facing)
@@ -100,7 +100,7 @@ echo 'layout scroll' | nc -U "$XDG_RUNTIME_DIR/stackcomp-ipc.sock"
 
 This is what tools like waybar or wayctl use through Wayland protocol objects and events, not through the local text socket.
 
-Important current limitation in stackcomp `ext_workspace_manager_v1`:
+Important current limitation in morph `ext_workspace_manager_v1`:
 
 - `activate`: implemented
 - `create_workspace`: currently no-op
@@ -122,30 +122,30 @@ meson compile -C build
 Run:
 
 ```bash
-./build/stackcomp
+./build/morph
 ```
 
 Release-style launcher run (recommended for daily use):
 
 ```bash
-./testing/stackcomp_run
+./testing/morph_run
 ```
 
-The launcher `testing/stackcomp_run` is a convenient way to initialize the compositor with sane defaults.
+The launcher `testing/morph_run` is a convenient way to initialize the compositor with sane defaults.
 It supports, among others, these runtime options:
 
-- `STACKCOMP_DBG=0|1|2`
-- `STACKCOMP_CONFIG=/path/to/config`
-- `STACKCOMP_ALLOW_BUILTIN_FALLBACK=1`
-- `STACKCOMP_X11=0|1`
-- `STACKCOMP_X11_DISPLAY=:12`
+- `MORPH_DBG=0|1|2`
+- `MORPH_CONFIG=/path/to/config`
+- `MORPH_ALLOW_BUILTIN_FALLBACK=1`
+- `MORPH_X11=0|1`
+- `MORPH_X11_DISPLAY=:12`
 
 Examples:
 
 ```bash
-STACKCOMP_DBG=0 ./testing/stackcomp_run
-STACKCOMP_CONFIG=/etc/stackcomp/stackcomp.conf STACKCOMP_DBG=1 ./testing/stackcomp_run
-STACKCOMP_ALLOW_BUILTIN_FALLBACK=1 ./testing/stackcomp_run
+MORPH_DBG=0 ./testing/morph_run
+MORPH_CONFIG=/etc/morph/morph.conf MORPH_DBG=1 ./testing/morph_run
+MORPH_ALLOW_BUILTIN_FALLBACK=1 ./testing/morph_run
 ```
 
 For full launcher behavior and all options, see:
@@ -157,11 +157,11 @@ For full launcher behavior and all options, see:
 
 `meson install -C build` now installs the production session runtime as:
 
-- `stackcomp` under the configured `bindir`
-- `stackcomp-session` under the configured `bindir`
-- runtime hooks and base files under `sysconfdir/stackcomp`
-- `stackcomp.desktop` under `share/wayland-sessions`
-- selected docs and reference files under `share/doc/stackcomp`
+- `morph` under the configured `bindir`
+- `morph-session` under the configured `bindir`
+- runtime hooks and base files under `sysconfdir/morph`
+- `morph.desktop` under `share/wayland-sessions`
+- selected docs and reference files under `share/doc/morph`
 
 For local development without a full system install, use:
 
@@ -169,11 +169,11 @@ For local development without a full system install, use:
 ./scripts/dev-install.sh install --link-launcher --print-sudo-help
 ```
 
-That dev helper can symlink the sample user files into `~/.config/stackcomp`,
-optionally expose `testing/stackcomp_run` as `~/.local/bin/stackcomp-dev-session`
+That dev helper can symlink the sample user files into `~/.config/morph`,
+optionally expose `testing/morph_run` as `~/.local/bin/morph-dev-session`
 for direct shell launches, and print the explicit `sudo` commands for a
-display-manager-visible dev session under `/usr/local/bin/stackcomp-dev-session`
-plus `/usr/share/wayland-sessions/stackcomp-dev.desktop`.
+display-manager-visible dev session under `/usr/local/bin/morph-dev-session`
+plus `/usr/share/wayland-sessions/morph-dev.desktop`.
 
 To remove only those dev symlinks again:
 
@@ -225,6 +225,6 @@ Detailed local workflow and troubleshooting notes are documented in
 
 - wlroots 0.19.x API is targeted.
 - Runtime dependencies include the normal wlroots graphics/input stack.
-- Startup logging options: `--log-level silent|error|info|debug`, `--quiet`, `--verbose`, and `--log-file /path/to/stackcomp.log`.
-- Crash handler options: `--crash-log /path/to/stackcomp-crash.log` and `--no-crash-handler`.
+- Startup logging options: `--log-level silent|error|info|debug`, `--quiet`, `--verbose`, and `--log-file /path/to/morph.log`.
+- Crash handler options: `--crash-log /path/to/morph-crash.log` and `--no-crash-handler`.
 - Crash handling and post-mortem workflow are documented in `CRASHING.md`.

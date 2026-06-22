@@ -1,5 +1,5 @@
 #!/bin/sh
-# Main stackcomp shutdown hook.
+# Main morph shutdown hook.
 # Keep this file focused on user-facing shutdown content:
 # - optional user cleanup
 # - optional user-managed service shutdown
@@ -11,8 +11,8 @@
 
 # Activate helper functions for shutdown logging so user cleanup can emit
 # messages into the standard shutdown log when needed.
-CURRENT_LOG_FILE="${STACKCOMP_SHUTDOWN_LOG_FILE:?STACKCOMP_SHUTDOWN_LOG_FILE is not set}"
-. "${STACKCOMP_HELPER_LIB:?STACKCOMP_HELPER_LIB is not set}"
+CURRENT_LOG_FILE="${MORPH_SHUTDOWN_LOG_FILE:?MORPH_SHUTDOWN_LOG_FILE is not set}"
+. "${MORPH_HELPER_LIB:?MORPH_HELPER_LIB is not set}"
 
 # Optional user cleanup goes here.
 # Example:

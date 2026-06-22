@@ -1,7 +1,7 @@
-# Stackcomp Launcher Guide
+# Morph Launcher Guide
 
 This document describes the runtime launcher behavior of
-testing/stackcomp_run.
+testing/morph_run.
 
 Use this guide for:
 - release versus debug launcher modes
@@ -23,12 +23,12 @@ For all environment variables and examples (including XKB settings), see:
 
 Typical files under log directory:
 
-- stackcomp.log
-- stackcomp-crash.log
-- stackcomp-startup.log
-- stackcomp-shutdown.log
-- stackcomp-nested-startup.log
-- stackcomp-nested-shutdown.log
+- morph.log
+- morph-crash.log
+- morph-startup.log
+- morph-shutdown.log
+- morph-nested-startup.log
+- morph-nested-shutdown.log
 
 ## Portal Resolution
 
@@ -36,17 +36,17 @@ Portal startup is managed separately from user autostarts.
 
 Resolution order in the current dev flow:
 
-1. `testing/stackcomp_run` exports `STACKCOMP_MANAGED_HOOKS=1`
+1. `testing/morph_run` exports `MORPH_MANAGED_HOOKS=1`
 2. The compositor dispatches `scripts/system_startup.sh`
 3. Managed base file: `config/portals`
-4. Optional user override: `~/.config/stackcomp/portals`
+4. Optional user override: `~/.config/morph/portals`
 
 Behavior:
 
 - The config keeps the user hook paths. The managed runtime reads those commands from the active config and passes them through environment variables.
 - `scripts/system_startup.sh` loads startup helpers, prepares nested/native runtime state, and then runs the configured user startup hook or its XDG fallback.
 - Native sessions load the managed base file before any session components are started.
-- If the user override exists, it is sourced after the base file and may replace `stackcomp_start_portals()`.
+- If the user override exists, it is sourced after the base file and may replace `morph_start_portals()`.
 - Nested sessions skip portal startup entirely.
 - Users do not need a portal file unless they intentionally want to override the managed default behavior.
 
@@ -56,7 +56,7 @@ Reload uses the compositor IPC entrypoint `reload config` / `reload`.
 
 Behavior in the current dev flow:
 
-- With `STACKCOMP_MANAGED_HOOKS=1`, the compositor dispatches `scripts/system_reload.sh` instead of running the configured reload hook directly.
+- With `MORPH_MANAGED_HOOKS=1`, the compositor dispatches `scripts/system_reload.sh` instead of running the configured reload hook directly.
 - `scripts/system_reload.sh` exposes the same helper library as startup/shutdown and then runs the configured user reload hook or its XDG fallback.
 - User reload hooks can restart managed session components in-place with `reload <cmd ...>`, for example `reload sfwbar`.
 - User reload hooks can also start optional components once with `reload_once <cmd ...>`, for example `reload_once mutagen`.
@@ -68,8 +68,8 @@ Behavior in the current dev flow:
 
 Path:
 
-- $XDG_STATE_HOME/stackcomp/shutdown_list.nfo
-- fallback: ~/.local/state/stackcomp/shutdown_list.nfo
+- $XDG_STATE_HOME/morph/shutdown_list.nfo
+- fallback: ~/.local/state/morph/shutdown_list.nfo
 
 This file is runtime state, not user configuration.
 Do not edit it manually.
@@ -87,35 +87,35 @@ Short lifecycle:
 
 Release default:
 
-  ./testing/stackcomp_run
+  ./testing/morph_run
 
 Release-debug logs:
 
-  STACKCOMP_DBG=1 ./testing/stackcomp_run
+  MORPH_DBG=1 ./testing/morph_run
 
 Debug + crash handler:
 
-  STACKCOMP_DBG=2 ./testing/stackcomp_run
+  MORPH_DBG=2 ./testing/morph_run
 
 Alternate config path:
 
-  STACKCOMP_CONFIG=/path/to/other.conf ./testing/stackcomp_run
+  MORPH_CONFIG=/path/to/other.conf ./testing/morph_run
 
 Disable satellite:
 
-  STACKCOMP_X11=0 ./testing/stackcomp_run
+  MORPH_X11=0 ./testing/morph_run
 
 Force satellite display:
 
-  STACKCOMP_X11_DISPLAY=:12 ./testing/stackcomp_run
+  MORPH_X11_DISPLAY=:12 ./testing/morph_run
 
 Custom log directory:
 
-  STACKCOMP_LOG_DIR=/tmp/stackcomp-test ./testing/stackcomp_run
+  MORPH_LOG_DIR=/tmp/morph-test ./testing/morph_run
 
 Allow builtin fallback when no config exists:
 
-  STACKCOMP_ALLOW_BUILTIN_FALLBACK=1 ./testing/stackcomp_run
+  MORPH_ALLOW_BUILTIN_FALLBACK=1 ./testing/morph_run
 
 ## Related Docs
 
@@ -126,12 +126,12 @@ Allow builtin fallback when no config exists:
 
 ## Production Counterpart
 
-The installed production wrapper is `stackcomp-session`.
+The installed production wrapper is `morph-session`.
 
-Differences from `testing/stackcomp_run`:
+Differences from `testing/morph_run`:
 
-- it defaults to `/etc/stackcomp` instead of repository paths
-- it starts the installed `stackcomp` binary instead of `./build/stackcomp`
+- it defaults to `/etc/morph` instead of repository paths
+- it starts the installed `morph` binary instead of `./build/morph`
 - it is installed through Meson and referenced by the session desktop file
 
 The development launcher remains the place for repo-local defaults, tests, and

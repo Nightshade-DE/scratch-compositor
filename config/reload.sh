@@ -1,5 +1,5 @@
 #!/bin/sh
-# Main stackcomp reload hook.
+# Main morph reload hook.
 # Keep this file focused on user-facing reload actions:
 # - restart panels or bars after config reload
 # - refresh optional user session components

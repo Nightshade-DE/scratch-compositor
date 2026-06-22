@@ -1,16 +1,16 @@
 #!/bin/sh
-# Managed startup runtime for stackcomp startup hooks.
+# Managed startup runtime for morph startup hooks.
 # - Activates shared startup helpers and logging.
 # - Prepares nested client environment before user services run.
 # - Starts managed portal runtime for native sessions.
 ################################################################################
 
 # Activate helper functions for startup logging and managed launch helpers.
-CURRENT_LOG_FILE="${STACKCOMP_STARTUP_LOG_FILE:?STACKCOMP_STARTUP_LOG_FILE is not set}"
-HELPER_LIB="${STACKCOMP_HELPER_LIB:-$(dirname "$(readlink -f "$0")")/shell-helpers.sh}"
+CURRENT_LOG_FILE="${MORPH_STARTUP_LOG_FILE:?MORPH_STARTUP_LOG_FILE is not set}"
+HELPER_LIB="${MORPH_HELPER_LIB:-$(dirname "$(readlink -f "$0")")/shell-helpers.sh}"
 . "$HELPER_LIB"
 
-if stackcomp_session_is_nested; then
+if morph_session_is_nested; then
     # Nested helper clients must target the compositor socket selected by the launcher.
     if [ -n "${WLR_WL_SOCKET:-}" ]; then
         export WAYLAND_DISPLAY="$WLR_WL_SOCKET"
@@ -26,10 +26,10 @@ else
     log_startup INFO "Native Wayland mode detected. Starting managed session services."
     # Treat portal loading failures as a managed runtime error, but keep the
     # user startup hook alive so session components can still start.
-    if stackcomp_source_portals; then
+    if morph_source_portals; then
         # Portals must come up before user autostarts so toolkit clients see
         # the intended desktop integration from their first connection onward.
-        stackcomp_start_portals
+        morph_start_portals
     else
         log_startup ERROR "Portal startup skipped because portal configuration failed to load."
     fi
@@ -37,4 +37,4 @@ fi
 
 # The managed runtime prepares the session first, then hands control to the
 # configured user startup hook or its conventional XDG fallback.
-stackcomp_run_optional_user_hook startup "${STACKCOMP_USER_STARTUP_HOOK_CMD:-}"
+morph_run_optional_user_hook startup "${MORPH_USER_STARTUP_HOOK_CMD:-}"

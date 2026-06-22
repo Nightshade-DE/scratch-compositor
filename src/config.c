@@ -253,14 +253,14 @@ static const char *layout_name(enum comp_layout layout) {
 }
 
 void comp_config_sync_layout_env(enum comp_layout layout) {
-	setenv("STACKCOMP_LAYOUT", layout_name(layout), 1);
+	setenv("MORPH_LAYOUT", layout_name(layout), 1);
 }
 
 void comp_config_sync_shell_env(struct comp_server *server) {
-	setenv("STACKCOMP_LAYOUT", layout_name(server->layout), 1);
+	setenv("MORPH_LAYOUT", layout_name(server->layout), 1);
 	char wbuf[16];
 	snprintf(wbuf, sizeof(wbuf), "%d", server->current_workspace + 1);
-	setenv("STACKCOMP_WORKSPACE", wbuf, 1);
+	setenv("MORPH_WORKSPACE", wbuf, 1);
 }
 
 static void apply_layout_anim_defaults(struct comp_config *cfg) {
@@ -332,7 +332,7 @@ static void load_defaults(struct comp_config *cfg) {
 
 /** Return true when builtin config fallback was explicitly enabled. */
 static bool builtin_config_fallback_enabled(void) {
-	const char *value = getenv("STACKCOMP_ALLOW_BUILTIN_FALLBACK");
+	const char *value = getenv("MORPH_ALLOW_BUILTIN_FALLBACK");
 	if (!value || !value[0]) {
 		return false;
 	}
@@ -344,19 +344,19 @@ static bool builtin_config_fallback_enabled(void) {
 bool comp_config_default_path(char *out, size_t out_len) {
 	const char *xdg = getenv("XDG_CONFIG_HOME");
 	if (xdg && xdg[0]) {
-		if (snprintf(out, out_len, "%s/stackcomp/stackcomp.conf", xdg) < (int)out_len &&
+		if (snprintf(out, out_len, "%s/morph/morph.conf", xdg) < (int)out_len &&
 			access(out, R_OK) == 0) {
 			return true;
 		}
 	}
 	const char *home = getenv("HOME");
 	if (home && home[0]) {
-		if (snprintf(out, out_len, "%s/.config/stackcomp/stackcomp.conf", home) < (int)out_len &&
+		if (snprintf(out, out_len, "%s/.config/morph/morph.conf", home) < (int)out_len &&
 			access(out, R_OK) == 0) {
 			return true;
 		}
 	}
-	if (snprintf(out, out_len, "%s", "/etc/stackcomp/stackcomp.conf") < (int)out_len &&
+	if (snprintf(out, out_len, "%s", "/etc/morph/morph.conf") < (int)out_len &&
 		access(out, R_OK) == 0) {
 		return true;
 	}
@@ -469,11 +469,11 @@ static bool env_flag_enabled(const char *value) {
 
 /** Return the directory that contains managed lifecycle hooks. */
 static const char *managed_hook_dir(void) {
-	const char *dir = getenv("STACKCOMP_SYSTEM_HOOK_DIR");
+	const char *dir = getenv("MORPH_SYSTEM_HOOK_DIR");
 	if (dir && dir[0]) {
 		return dir;
 	}
-	return "/etc/stackcomp";
+	return "/etc/morph";
 }
 
 /** Export the user hook commands so managed scripts can invoke them in-order. */
@@ -484,19 +484,19 @@ static void export_managed_hook_env(const struct comp_config *cfg) {
 	/* Managed mode keeps config parsing inside the compositor, but the shell
 	 * runtime still needs the resolved hook snippets for the user phase. */
 	if (cfg->hook_startup && cfg->hook_startup[0]) {
-		setenv("STACKCOMP_USER_STARTUP_HOOK_CMD", cfg->hook_startup, 1);
+		setenv("MORPH_USER_STARTUP_HOOK_CMD", cfg->hook_startup, 1);
 	} else {
-		unsetenv("STACKCOMP_USER_STARTUP_HOOK_CMD");
+		unsetenv("MORPH_USER_STARTUP_HOOK_CMD");
 	}
 	if (cfg->hook_shutdown && cfg->hook_shutdown[0]) {
-		setenv("STACKCOMP_USER_SHUTDOWN_HOOK_CMD", cfg->hook_shutdown, 1);
+		setenv("MORPH_USER_SHUTDOWN_HOOK_CMD", cfg->hook_shutdown, 1);
 	} else {
-		unsetenv("STACKCOMP_USER_SHUTDOWN_HOOK_CMD");
+		unsetenv("MORPH_USER_SHUTDOWN_HOOK_CMD");
 	}
 	if (cfg->hook_reload && cfg->hook_reload[0]) {
-		setenv("STACKCOMP_USER_RELOAD_HOOK_CMD", cfg->hook_reload, 1);
+		setenv("MORPH_USER_RELOAD_HOOK_CMD", cfg->hook_reload, 1);
 	} else {
-		unsetenv("STACKCOMP_USER_RELOAD_HOOK_CMD");
+		unsetenv("MORPH_USER_RELOAD_HOOK_CMD");
 	}
 }
 
@@ -526,7 +526,7 @@ static void spawn_managed_hook(const char *hook_name, bool wait_for_exit) {
 
 /** Managed launcher/runtime mode keeps the lifecycle frame outside user hooks. */
 static bool managed_hooks_enabled(void) {
-	return env_flag_enabled(getenv("STACKCOMP_MANAGED_HOOKS"));
+	return env_flag_enabled(getenv("MORPH_MANAGED_HOOKS"));
 }
 
 void comp_config_run_startup(const struct comp_config *cfg) {

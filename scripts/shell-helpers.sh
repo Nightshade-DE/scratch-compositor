@@ -1,9 +1,9 @@
 #!/bin/sh
-# Shared stackcomp startup/shutdown helpers.
+# Shared morph startup/shutdown helpers.
 # - Provides unified startup/shutdown logging helpers.
 # - Starts background services with optional shutdown registration.
 # - Detects reachable X11 displays for nested-mode startup decisions.
-# - Runs stackcomp with capture into startup logs.
+# - Runs morph with capture into startup logs.
 # - Emits compact per-run error summaries from core/crash logs.
 ################################################################################
 
@@ -33,7 +33,7 @@ log_shutdown() {
 }
 
 # Return shell truth for common environment flag values.
-stackcomp_env_flag_is_enabled() {
+morph_env_flag_is_enabled() {
     case "${1:-}" in
         1|true|TRUE|yes|YES|on|ON)
             return 0
@@ -49,11 +49,11 @@ stackcomp_env_flag_is_enabled() {
 # ==============================================================================
 
 # Return success when the compositor runs nested under X11 or Wayland.
-stackcomp_session_is_nested() {
+morph_session_is_nested() {
     # Prefer the launcher-provided mode so hooks do not have to infer runtime
     # state from backend strings when a more explicit source is available.
-    if [ -n "${STACKCOMP_SESSION_MODE:-}" ]; then
-        [ "$STACKCOMP_SESSION_MODE" = "nested" ]
+    if [ -n "${MORPH_SESSION_MODE:-}" ]; then
+        [ "$MORPH_SESSION_MODE" = "nested" ]
         return $?
     fi
 
@@ -61,18 +61,18 @@ stackcomp_session_is_nested() {
 }
 
 # Register one executable basename once for managed shutdown cleanup.
-stackcomp_register_shutdown_program() {
+morph_register_shutdown_program() {
     prog_name="$1"
 
-    if [ -z "${STACKCOMP_SHUTDOWN_LIST:-}" ]; then
+    if [ -z "${MORPH_SHUTDOWN_LIST:-}" ]; then
         return 0
     fi
 
-    if [ -f "$STACKCOMP_SHUTDOWN_LIST" ] && grep -Fx -- "$prog_name" "$STACKCOMP_SHUTDOWN_LIST" >/dev/null 2>&1; then
+    if [ -f "$MORPH_SHUTDOWN_LIST" ] && grep -Fx -- "$prog_name" "$MORPH_SHUTDOWN_LIST" >/dev/null 2>&1; then
         return 0
     fi
 
-    printf '%s\n' "$prog_name" >> "$STACKCOMP_SHUTDOWN_LIST"
+    printf '%s\n' "$prog_name" >> "$MORPH_SHUTDOWN_LIST"
 }
 
 # Start a service with line-buffered logging. Optionally register it for shutdown.
@@ -88,7 +88,7 @@ launch_logged() {
             log_startup INFO "Starting $cmd_name (registered for automatic shutdown)."
             # Record only the executable basename so shutdown can match the
             # process even when the startup command used an absolute path.
-            stackcomp_register_shutdown_program "$prog_name"
+            morph_register_shutdown_program "$prog_name"
             ;;
         skip)
             log_startup INFO "Starting $cmd_name (not registered for shutdown)."
@@ -113,7 +113,7 @@ launch() {
 launch_nested() {
     cmd_name="$1"
 
-    if ! stackcomp_session_is_nested; then
+    if ! morph_session_is_nested; then
         log_startup INFO "Skipping $cmd_name (launch_nested only runs in nested sessions)."
         return 0
     fi
@@ -143,7 +143,7 @@ reload() {
         log_message INFO "No running instance found for reload: $prog_name"
     fi
 
-    stackcomp_register_shutdown_program "$prog_name"
+    morph_register_shutdown_program "$prog_name"
 
     stdbuf -oL -eL "$@" 2>&1 | while IFS= read -r line; do
         log_message INFO "[reload:$cmd_name] $line"
@@ -159,12 +159,12 @@ reload_once() {
     # that should be brought up once without turning every reload into a restart.
     if pkill -0 -x "$prog_name" >/dev/null 2>&1; then
         log_message INFO "Skipping reload_once for already running component: $prog_name"
-        stackcomp_register_shutdown_program "$prog_name"
+        morph_register_shutdown_program "$prog_name"
         return 0
     fi
 
     log_message INFO "Starting component through reload_once: $cmd_name"
-    stackcomp_register_shutdown_program "$prog_name"
+    morph_register_shutdown_program "$prog_name"
 
     stdbuf -oL -eL "$@" 2>&1 | while IFS= read -r line; do
         log_message INFO "[reload_once:$cmd_name] $line"
@@ -177,17 +177,17 @@ reload_once() {
 # Return the fixed managed config directory for portals and other runtime assets.
 # The dev launcher may override this so the same runtime code can be exercised
 # from the repository without pretending that repo files already live in /etc.
-stackcomp_managed_config_dir() {
-    printf '%s\n' "${STACKCOMP_SYSTEM_CONFIG_DIR:-/etc/stackcomp}"
+morph_managed_config_dir() {
+    printf '%s\n' "${MORPH_SYSTEM_CONFIG_DIR:-/etc/morph}"
 }
 
 # Return the user config directory that can override managed runtime files.
-stackcomp_user_config_dir() {
-    printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/stackcomp"
+morph_user_config_dir() {
+    printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/morph"
 }
 
 # Return the last configured hook command from a config file's [hooks] section.
-stackcomp_config_hook_from_file() {
+morph_config_hook_from_file() {
     hook_kind="$1"
     config_file="$2"
 
@@ -252,10 +252,10 @@ stackcomp_config_hook_from_file() {
 # Run a user hook command from the active config, or fall back to the standard
 # XDG user hook path when the managed runtime was enabled without an explicit
 # hook entry for that lifecycle phase.
-stackcomp_run_optional_user_hook() {
+morph_run_optional_user_hook() {
     hook_kind="$1"
     hook_cmd="$2"
-    hook_path="$(stackcomp_user_config_dir)/$hook_kind.sh"
+    hook_path="$(morph_user_config_dir)/$hook_kind.sh"
     hook_cmd_path=""
 
     if [ -n "$hook_cmd" ]; then
@@ -291,7 +291,7 @@ stackcomp_run_optional_user_hook() {
     if [ -r "$hook_path" ]; then
         # Source the fallback hook in the current shell so helper functions stay
         # available even when the user relies on the conventional XDG path
-        # instead of configuring an explicit hook command in stackcomp.conf.
+        # instead of configuring an explicit hook command in morph.conf.
         log_message INFO "Sourcing default user $hook_kind hook: $hook_path"
         # shellcheck disable=SC1090
         . "$hook_path"
@@ -305,9 +305,9 @@ stackcomp_run_optional_user_hook() {
 # Source the managed portal definition and then an optional user override.
 # This keeps portal startup in the runtime layer while still allowing advanced
 # users to replace the implementation in one dedicated file.
-stackcomp_source_portals() {
-    base_portals_file="$(stackcomp_managed_config_dir)/portals"
-    user_portals_file="$(stackcomp_user_config_dir)/portals"
+morph_source_portals() {
+    base_portals_file="$(morph_managed_config_dir)/portals"
+    user_portals_file="$(morph_user_config_dir)/portals"
 
     if [ ! -r "$base_portals_file" ]; then
         log_startup ERROR "Managed portals file is missing or unreadable: $base_portals_file."
@@ -328,8 +328,8 @@ stackcomp_source_portals() {
         log_startup INFO "No user portal override found. Using managed portal defaults."
     fi
 
-    if ! type stackcomp_start_portals >/dev/null 2>&1; then
-        log_startup ERROR "Portal setup did not define stackcomp_start_portals."
+    if ! type morph_start_portals >/dev/null 2>&1; then
+        log_startup ERROR "Portal setup did not define morph_start_portals."
         return 1
     fi
 }
@@ -395,36 +395,36 @@ line_count_or_zero() {
 # Runtime capture helpers
 # ==============================================================================
 
-# Run stackcomp and mirror stdout/stderr into the startup log via FIFO+tee.
-# Expects LOG_DIR, STACKCOMP_STARTUP_LOG_FILE, STACKCOMP_BIN, CONFIG_FILE, LOG_FILE,
-# CRASH_LOG_FILE, STACKCOMP_LOG_LEVEL and STACKCOMP_ENABLE_CRASH_HANDLER.
-run_stackcomp_with_capture() {
-    fifo_path=$(mktemp -u "$LOG_DIR/stackcomp-output.XXXXXX.fifo") || return 1
+# Run morph and mirror stdout/stderr into the startup log via FIFO+tee.
+# Expects LOG_DIR, MORPH_STARTUP_LOG_FILE, MORPH_BIN, CONFIG_FILE, LOG_FILE,
+# CRASH_LOG_FILE, MORPH_LOG_LEVEL and MORPH_ENABLE_CRASH_HANDLER.
+run_morph_with_capture() {
+    fifo_path=$(mktemp -u "$LOG_DIR/morph-output.XXXXXX.fifo") || return 1
     if ! mkfifo "$fifo_path"; then
         log_startup ERROR "Failed to create output capture FIFO at $fifo_path."
         return 1
     fi
 
-    tee -a "$STACKCOMP_STARTUP_LOG_FILE" <"$fifo_path" &
+    tee -a "$MORPH_STARTUP_LOG_FILE" <"$fifo_path" &
     tee_pid=$!
 
-    stackcomp_bin="${STACKCOMP_BIN:?STACKCOMP_BIN is not set}"
-    level="${STACKCOMP_LOG_LEVEL:-error}"
-    enable_crash="${STACKCOMP_ENABLE_CRASH_HANDLER:-0}"
+    morph_bin="${MORPH_BIN:?MORPH_BIN is not set}"
+    level="${MORPH_LOG_LEVEL:-error}"
+    enable_crash="${MORPH_ENABLE_CRASH_HANDLER:-0}"
     if [ "$enable_crash" = "1" ]; then
         if [ -n "${CONFIG_FILE:-}" ]; then
-            "$stackcomp_bin" -c "$CONFIG_FILE" --log-level "$level" --log-file "$LOG_FILE" --crash-log "$CRASH_LOG_FILE" >"$fifo_path" 2>&1
+            "$morph_bin" -c "$CONFIG_FILE" --log-level "$level" --log-file "$LOG_FILE" --crash-log "$CRASH_LOG_FILE" >"$fifo_path" 2>&1
         else
             # Omit -c entirely only when the launcher intentionally reached the
             # no-config builtin fallback path. Any explicit or resolved config
             # file is still passed through -c above; nothing is ignored here.
-            "$stackcomp_bin" --log-level "$level" --log-file "$LOG_FILE" --crash-log "$CRASH_LOG_FILE" >"$fifo_path" 2>&1
+            "$morph_bin" --log-level "$level" --log-file "$LOG_FILE" --crash-log "$CRASH_LOG_FILE" >"$fifo_path" 2>&1
         fi
     else
         if [ -n "${CONFIG_FILE:-}" ]; then
-            "$stackcomp_bin" -c "$CONFIG_FILE" --log-level "$level" --log-file "$LOG_FILE" --no-crash-handler >"$fifo_path" 2>&1
+            "$morph_bin" -c "$CONFIG_FILE" --log-level "$level" --log-file "$LOG_FILE" --no-crash-handler >"$fifo_path" 2>&1
         else
-            "$stackcomp_bin" --log-level "$level" --log-file "$LOG_FILE" --no-crash-handler >"$fifo_path" 2>&1
+            "$morph_bin" --log-level "$level" --log-file "$LOG_FILE" --no-crash-handler >"$fifo_path" 2>&1
         fi
     fi
     cmd_status=$?
@@ -438,12 +438,12 @@ run_stackcomp_with_capture() {
 # ==============================================================================
 
 # Emit a compact error summary for the current run only.
-# Expects LOG_DIR, LOG_FILE, CRASH_LOG_FILE, CORE_LOG_BASELINE, CRASH_LOG_BASELINE, STACKCOMP_STARTUP_LOG_FILE.
+# Expects LOG_DIR, LOG_FILE, CRASH_LOG_FILE, CORE_LOG_BASELINE, CRASH_LOG_BASELINE, MORPH_STARTUP_LOG_FILE.
 dump_recent_error_summary() {
     pattern='warn|warning|error|failed|crash|segv|sig'
     log_startup INFO "Automatic error summary (current run only)"
 
-    summary_tmp=$(mktemp "$LOG_DIR/stackcomp-error-summary.XXXXXX") || {
+    summary_tmp=$(mktemp "$LOG_DIR/morph-error-summary.XXXXXX") || {
         log_startup ERROR "Summary skipped: failed to create temporary summary file."
         return
     }
@@ -474,7 +474,7 @@ dump_recent_error_summary() {
     done
 
     if [ -s "$summary_tmp" ]; then
-        awk '!seen[$0]++' "$summary_tmp" | sed 's/^/[error-scan] /' | tee -a "$STACKCOMP_STARTUP_LOG_FILE"
+        awk '!seen[$0]++' "$summary_tmp" | sed 's/^/[error-scan] /' | tee -a "$MORPH_STARTUP_LOG_FILE"
     else
         log_startup INFO "Summary had no matching lines in the current run."
     fi

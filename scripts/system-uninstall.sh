@@ -1,5 +1,5 @@
 #!/bin/sh
-# Conservative uninstall helper for Meson-installed stackcomp artifacts.
+# Conservative uninstall helper for Meson-installed morph artifacts.
 # - Reads the current install manifest from `meson introspect --installed`.
 # - Prints the exact installed paths by default.
 # - Removes only unchanged files when explicitly asked to do so.
@@ -62,8 +62,8 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-manifest_json=$(mktemp "${TMPDIR:-/tmp}/stackcomp-install-manifest.XXXXXX")
-manifest_pairs=$(mktemp "${TMPDIR:-/tmp}/stackcomp-install-pairs.XXXXXX")
+manifest_json=$(mktemp "${TMPDIR:-/tmp}/morph-install-manifest.XXXXXX")
+manifest_pairs=$(mktemp "${TMPDIR:-/tmp}/morph-install-pairs.XXXXXX")
 trap 'rm -f "$manifest_json" "$manifest_pairs"' EXIT HUP INT TERM
 
 meson introspect --installed "$BUILD_DIR" > "$manifest_json"

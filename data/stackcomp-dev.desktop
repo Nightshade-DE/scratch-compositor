@@ -1,9 +1,0 @@
-[Desktop Entry]
-Type=Application
-# Development Wayland session entry for local repo testing through a display manager.
-Name=Stackcomp (Dev)
-Comment=Repository-backed Stackcomp session for local launcher testing
-Exec=/usr/local/bin/stackcomp-dev-session
-TryExec=/usr/local/bin/stackcomp-dev-session
-DesktopNames=Stackcomp
-Keywords=wm;wayland;compositor;wlroots;dev;

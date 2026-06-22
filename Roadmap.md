@@ -14,8 +14,8 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 ## Target State
 
 - [ ] Create a production-ready session startup that is clearer for users than the current developer-heavy flow.
-- [ ] Provide system-wide base configuration under `/etc/stackcomp`.
-- [ ] Layer user configuration under `~/.config/stackcomp` as an override on top of the system base.
+- [ ] Provide system-wide base configuration under `/etc/morph`.
+- [ ] Layer user configuration under `~/.config/morph` as an override on top of the system base.
 - [ ] Model `startup`, `reload`, and `shutdown` as a clear, robust lifecycle.
 - [ ] Keep the current test and development flow, but separate it cleanly from production session initialization.
 
@@ -23,28 +23,28 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 ### System-wide
 
-- [ ] `/usr/bin/stackcomp` for the binary.
+- [ ] `/usr/bin/morph` for the binary.
 - [ ] `/usr/bin/<session-wrapper>` for the production session wrapper.
-- [ ] `/etc/stackcomp/stackcomp.conf` as base configuration.
-- [ ] `/etc/stackcomp/startup.sh` as the base hook for session components and autostarts.
-- [ ] `/etc/stackcomp/reload.sh` for reload-specific coupling.
-- [ ] `/etc/stackcomp/shutdown.sh` for optional system-wide extra shutdown behavior.
-- [ ] `/etc/stackcomp/environment` for system-wide runtime defaults.
-- [ ] `/etc/stackcomp/portals` as a single file for portal handling.
-- [ ] `/usr/share/wayland-sessions/stackcomp.desktop` for display managers.
-- [ ] `/usr/share/doc/stackcomp/` for docs and reference files.
+- [ ] `/etc/morph/morph.conf` as base configuration.
+- [ ] `/etc/morph/startup.sh` as the base hook for session components and autostarts.
+- [ ] `/etc/morph/reload.sh` for reload-specific coupling.
+- [ ] `/etc/morph/shutdown.sh` for optional system-wide extra shutdown behavior.
+- [ ] `/etc/morph/environment` for system-wide runtime defaults.
+- [ ] `/etc/morph/portals` as a single file for portal handling.
+- [ ] `/usr/share/wayland-sessions/morph.desktop` for display managers.
+- [ ] `/usr/share/doc/morph/` for docs and reference files.
 
 ### User-specific
 
-- [ ] `~/.config/stackcomp/stackcomp.conf` as the user override for the base configuration.
-- [ ] `~/.config/stackcomp/startup.sh` for additional user autostarts and session components.
-- [ ] `~/.config/stackcomp/reload.sh` for user reload behavior.
-- [ ] Optional `~/.config/stackcomp/shutdown.sh` for extra user shutdown logic.
-- [ ] Optional `~/.config/stackcomp/environment` for user-specific environment overrides.
+- [ ] `~/.config/morph/morph.conf` as the user override for the base configuration.
+- [ ] `~/.config/morph/startup.sh` for additional user autostarts and session components.
+- [ ] `~/.config/morph/reload.sh` for user reload behavior.
+- [ ] Optional `~/.config/morph/shutdown.sh` for extra user shutdown logic.
+- [ ] Optional `~/.config/morph/environment` for user-specific environment overrides.
 
 ## Architecture Decisions
 
-- [ ] `/etc/stackcomp` contains the base layer. `~/.config/stackcomp` overrides it selectively.
+- [ ] `/etc/morph` contains the base layer. `~/.config/morph` overrides it selectively.
 - [ ] Portal handling lives in a single file, not in a directory.
 - [ ] `startup.sh` is reduced to a user-facing file that only contains session components and additional autostarts.
 - [ ] Nested/native detection is pulled out of the user hooks.
@@ -62,11 +62,11 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 - [x] Create branch `feature/install-and-user-setup` from `33e99c9`.
 - [x] Document the current relevant files and code paths:
-  - [x] `testing/stackcomp_run`
+  - [x] `testing/morph_run`
   - [x] `config/startup.sh`
   - [x] `config/shutdown.sh`
   - [x] `config/environment`
-  - [x] `data/stackcomp.desktop`
+  - [x] `data/morph.desktop`
   - [x] `meson.build`
   - [x] Config search paths in `src/config.c`
 - [x] Record hard compatibility boundaries:
@@ -76,14 +76,14 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 #### Current State
 
-- [x] `testing/stackcomp_run` is currently the central session launcher and mixes production and dev responsibilities.
+- [x] `testing/morph_run` is currently the central session launcher and mixes production and dev responsibilities.
 - [x] `config/startup.sh` was not a pure user hook and used to contain session decisions and portal logic directly.
 - [x] `config/shutdown.sh` was tied to the managed `launch` flow and did not yet expose controlled user-hook integration.
 - [x] `config/environment` is still explicitly aligned with the test/launcher flow.
-- [x] `data/stackcomp.desktop` still starts the binary directly instead of a wrapper.
-- [x] A local `/usr/bin/stackcomp -> testing/stackcomp_run` workaround may already exist and must be treated as transitional.
+- [x] `data/morph.desktop` still starts the binary directly instead of a wrapper.
+- [x] A local `/usr/bin/morph -> testing/morph_run` workaround may already exist and must be treated as transitional.
 - [x] `meson.build` still installs only the binary, the config test, and the session desktop file.
-- [x] The binary config search logic still does not know `/etc/stackcomp/stackcomp.conf`.
+- [x] The binary config search logic still does not know `/etc/morph/morph.conf`.
 
 #### Current Branch State after the First Runtime Refactors
 
@@ -95,12 +95,12 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
   - [x] `config/shutdown.sh` is the optional user shutdown hook
   - [x] `scripts/system_shutdown.sh` is the managed cleanup runtime that must still run after the user hook
 - [x] The current dev flow now uses managed hook dispatch instead of direct user-hook execution:
-  - [x] `testing/stackcomp_run` exports `STACKCOMP_MANAGED_HOOKS=1`
+  - [x] `testing/morph_run` exports `MORPH_MANAGED_HOOKS=1`
   - [x] the binary then dispatches `scripts/system_startup.sh` and `scripts/system_shutdown.sh`
   - [x] configured user hooks remain in the config and are only run from the managed runtime in the intended order
 - [x] Portal handling is now encapsulated as its own managed runtime building block:
   - [x] `config/portals` contains the base flow for native sessions
-  - [x] an optional override under `~/.config/stackcomp/portals` is loaded after the base file
+  - [x] an optional override under `~/.config/morph/portals` is loaded after the base file
   - [x] the effective portal and toolkit variables are logged dynamically into the startup log
 - [x] The test layer now covers more than config parsing:
   - [x] `tests/test_shell_runtime.sh` verifies central shell runtime contracts
@@ -111,25 +111,25 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 - [x] Dev-only remains everything explicitly described as a test or developer path.
 - [x] Production must include the pieces that initialize a real session and must stay stably reachable for users.
-- [x] The main stable user-facing files remain `~/.config/stackcomp/stackcomp.conf`, `startup.sh`, `reload.sh`, and optional `shutdown.sh` and `environment`.
+- [x] The main stable user-facing files remain `~/.config/morph/morph.conf`, `startup.sh`, `reload.sh`, and optional `shutdown.sh` and `environment`.
 - [x] `shutdown_list.nfo` remains runtime state, not a user-editable file.
 
 ### 2. Target Architecture for Runtime Files and Ownership
 
 - [x] Separate system paths and user paths.
 - [x] Define ownership for `config`, hooks, `environment`, `portals`, docs, and the session file.
-- [x] Define override rules between `/etc/stackcomp` and `~/.config/stackcomp`.
+- [x] Define override rules between `/etc/morph` and `~/.config/morph`.
 - [x] Separate runtime files from templates and pure documentation.
-- [x] Account for the current `/usr/bin/stackcomp -> testing/stackcomp_run` workaround as a migration case.
+- [x] Account for the current `/usr/bin/morph -> testing/morph_run` workaround as a migration case.
 
 #### Target Architecture and Ownership
 
-- [x] `/usr/bin/stackcomp` is the installed binary in the target state, not the session wrapper.
+- [x] `/usr/bin/morph` is the installed binary in the target state, not the session wrapper.
 - [x] `/usr/bin/<session-wrapper>` is the production entrypoint for real sessions.
 - [x] The installed session file under `/usr/share/wayland-sessions/` will point to the production wrapper instead of the binary.
-- [x] `/etc/stackcomp` is the system-wide base layer.
-- [x] `~/.config/stackcomp` is the user override layer.
-- [x] `/usr/share/doc/stackcomp/` is documentation/reference only.
+- [x] `/etc/morph` is the system-wide base layer.
+- [x] `~/.config/morph` is the user override layer.
+- [x] `/usr/share/doc/morph/` is documentation/reference only.
 - [x] `testing/*` remains the development and test layer.
 
 #### Override and Resolution Rules
@@ -141,13 +141,13 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 #### Runtime Files vs. Templates vs. Docs
 
-- [x] Live runtime files: `/etc/stackcomp/*`, `~/.config/stackcomp/*`, installed session file.
-- [x] Development/test templates: `testing/stackcomp.conf`, `testing/stackcomp_run`.
+- [x] Live runtime files: `/etc/morph/*`, `~/.config/morph/*`, installed session file.
+- [x] Development/test templates: `testing/morph.conf`, `testing/morph_run`.
 - [x] Reference-only files: Markdown docs and example files that are not installed as runtime files.
 
 #### Migration Notes for the Current Workaround
 
-- [x] A local `/usr/bin/stackcomp -> testing/stackcomp_run` link is transitional, not the target state.
+- [x] A local `/usr/bin/morph -> testing/morph_run` link is transitional, not the target state.
 - [x] The new production wrapper must consciously take over this role.
 - [x] Dev install may still offer a quick symlink flow, but it must stay clearly separate from production system install.
 
@@ -207,7 +207,7 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 - [x] Remove direct nested/native branching, embedded portal handling, and the implicit mix of runtime core and user content from `config/startup.sh`.
 - [x] Runtime preparation now lives before user content in a separate file: `scripts/system_startup.sh`, which then starts the user hook.
 - [x] The current dev flow now has three separated layers:
-  - [x] `testing/stackcomp_run` as launcher and runtime frame
+  - [x] `testing/morph_run` as launcher and runtime frame
   - [x] `scripts/system_startup.sh` as managed startup preparation
   - [x] `config/startup.sh` as the slim user hook for session components
 
@@ -225,7 +225,7 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 - [x] Define how `shutdown_list.nfo` remains authoritative.
 - [x] Wire an optional user shutdown hook so the core flow cannot be lost.
 - [x] Provide clear error paths for incompatible hook usage.
-- [x] Define a fallback if only `stackcomp` itself can be shut down or restarted safely.
+- [x] Define a fallback if only `morph` itself can be shut down or restarted safely.
 
 ### 6. Introduce the Reload Flow
 
@@ -238,9 +238,9 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 - [x] Reload stays bound to the existing IPC/CLI entrypoint:
   - [x] `reload config` / `reload` inside the running compositor
-  - [x] `stackcomp --reload-config` as the CLI frontend to that path
+  - [x] `morph --reload-config` as the CLI frontend to that path
 - [x] The managed reload flow now uses `scripts/system_reload.sh`.
-- [x] User reload hooks remain config-driven and fall back to `~/.config/stackcomp/reload.sh`.
+- [x] User reload hooks remain config-driven and fall back to `~/.config/morph/reload.sh`.
 - [x] The helper API now includes `reload <cmd ...>` for targeted restarts of managed session components without duplicating shutdown tracker entries.
 - [x] The helper API now includes `reload_once <cmd ...>` for optional extra components that should only be started once during reload.
 
@@ -257,27 +257,27 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
   - [x] user environment
   - [x] system environment
   - [x] wrapper defaults
-- [x] Decide whether the binary itself should know `/etc/stackcomp/stackcomp.conf` or whether the wrapper sets `STACKCOMP_CONFIG`.
+- [x] Decide whether the binary itself should know `/etc/morph/morph.conf` or whether the wrapper sets `MORPH_CONFIG`.
 - [x] Ensure system defaults act as a base and user overrides layer on top.
 
-- [x] The binary now knows `/etc/stackcomp/stackcomp.conf` as the final default search path.
-- [x] The dev launcher now treats `STACKCOMP_CONFIG` as the canonical config override variable.
+- [x] The binary now knows `/etc/morph/morph.conf` as the final default search path.
+- [x] The dev launcher now treats `MORPH_CONFIG` as the canonical config override variable.
 - [x] Missing or unreadable config files now raise an explicit error instead of triggering a silent start without a config.
-- [x] An explicit compatibility switch (`--allow-builtin-fallback` or `STACKCOMP_ALLOW_BUILTIN_FALLBACK=1`) can re-enable the old builtin fallback when needed.
+- [x] An explicit compatibility switch (`--allow-builtin-fallback` or `MORPH_ALLOW_BUILTIN_FALLBACK=1`) can re-enable the old builtin fallback when needed.
 
 ### 8. Installation Strategy
 
 - [ ] Create a dedicated dev install script.
-- [ ] Plan dev install symlinks into `~/.config/stackcomp`.
+- [ ] Plan dev install symlinks into `~/.config/morph`.
 - [ ] Provide clear `sudo` output/help for dev install of the session desktop file.
 - [ ] Provide the binary and session wrapper under stable paths for user scripts.
 - [ ] Define system install cleanly via Meson and/or a separate install script.
 - [ ] Plan uninstall strategy from the start:
   - [x] dev uninstall for created symlinks and locally installed helpers
-  - [x] system uninstall for installed files under `/usr/bin`, `/etc/stackcomp`, `/usr/share/wayland-sessions`, and `/usr/share/doc/stackcomp`
+  - [x] system uninstall for installed files under `/usr/bin`, `/etc/morph`, `/usr/share/wayland-sessions`, and `/usr/share/doc/morph`
   - [x] never remove real user files automatically; only revert install-created symlinks or generated files
 - [x] Create a dedicated dev install script.
-- [x] Plan dev install symlinks into `~/.config/stackcomp`.
+- [x] Plan dev install symlinks into `~/.config/morph`.
 - [x] Provide clear `sudo` output/help for dev install of the session desktop file.
 - [x] Provide the binary and session wrapper under stable paths for user scripts.
 - [x] Define system install cleanly via Meson and/or a separate install script.
@@ -285,10 +285,10 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 ### 9. Meson and Packaging Adjustments
 
-- [x] Add install targets for `/etc/stackcomp/*`.
+- [x] Add install targets for `/etc/morph/*`.
 - [x] Add an install target for the session wrapper.
 - [x] Wire the session desktop file cleanly to the production entrypoint.
-- [x] Install docs and reference files into `/usr/share/doc/stackcomp/`.
+- [x] Install docs and reference files into `/usr/share/doc/morph/`.
 - [ ] Separate which files are templates and which are real runtime files.
 - [x] Document and, where useful, automate a clean uninstall path for system and dev installs.
 
@@ -310,7 +310,7 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 - [ ] Test native sessions through the production wrapper.
 - [ ] Test nested sessions through the production wrapper.
 - [ ] Test display-manager startup through the `.desktop` file.
-- [ ] Test user overrides against `/etc/stackcomp/stackcomp.conf`.
+- [ ] Test user overrides against `/etc/morph/morph.conf`.
 - [ ] Test `launch_nested` behavior in a real nested session.
 - [ ] Test `launch_nokill` behavior in a native session.
 - [ ] Test reload scenarios with a panel or similar session component.
@@ -318,9 +318,16 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 ## Open Design Questions
 
-- [ ] Only prepare the final production wrapper name in this branch; handle the actual rename to `morph` later.
-- [ ] Decide whether `config` and `environment` resolution stays purely in shell/wrapper logic or moves partially into the binary.
-- [ ] Decide how much user hooks need to be constrained so the managed lifecycle remains robust.
+- [x] Only prepare the final production wrapper name in this branch; handle the actual rename to `morph` later.
+  - [x] The production binary, session wrapper, desktop files, config paths, and user-facing `MORPH_*` variables now use the `morph` name.
+- [x] Decide whether `config` and `environment` resolution stays purely in shell/wrapper logic or moves partially into the binary.
+  - [x] `morph.conf` and its default search paths stay in the binary because the config is the compositor-facing interface.
+  - [x] `environment` files and their priority chain stay in the wrapper/shell layer because they belong to session orchestration and runtime variable setup.
+  - [x] The binary may continue to consume prepared environment variables such as `XKB_DEFAULT_*` and `MORPH_DEBUG_XDG`, but it should not resolve `environment` files itself.
+- [x] Decide how much user hooks need to be constrained so the managed lifecycle remains robust.
+  - [x] User hooks stay flexible and may be used both through the session wrapper and directly with the binary.
+  - [x] The managed startup, reload, and shutdown frame remains mandatory and cannot be disabled by hook selection alone.
+  - [x] Invalid or incompatible hook usage should be absorbed through logging and fallback behavior instead of silently losing the core lifecycle flow.
 
 ## Definition of Done per Work Package
 

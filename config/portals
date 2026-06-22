@@ -4,13 +4,13 @@
 # session components instead of compositor runtime plumbing.
 # Runtime order:
 # 1. This managed base file is loaded first.
-# 2. An optional user override at ~/.config/stackcomp/portals is loaded after it.
-# The override may replace stackcomp_start_portals() when portal behavior needs
+# 2. An optional user override at ~/.config/morph/portals is loaded after it.
+# The override may replace morph_start_portals() when portal behavior needs
 # to change, without forcing every user to carry portal startup code in startup.sh.
 ################################################################################
 
-stackcomp_start_portals() {
-    if stackcomp_session_is_nested; then
+morph_start_portals() {
+    if morph_session_is_nested; then
         log_startup INFO "Skipping portal startup in nested mode."
         return 0
     fi
@@ -20,7 +20,7 @@ stackcomp_start_portals() {
     pkill -x "xdg-desktop-portal-wlr|xdg-desktop-portal-gtk|xdg-desktop-portal-hyprland|xdg-desktop-portal-gnome|xdg-desktop-portal-kde|xdg-desktop-portal-lxqt|xdg-desktop-portal" 2>/dev/null
     log_startup INFO "Killed stale xdg-desktop-portal instances."
 
-    # Portal backends needed by stackcomp
+    # Portal backends needed by morph
     # ==============================================================================
     # wlroots backend for screencast, screenshot, and monitor sharing.
     launch_nokill /usr/libexec/xdg-desktop-portal-wlr

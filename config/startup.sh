@@ -1,5 +1,5 @@
 #!/bin/sh
-# Main stackcomp startup hook.
+# Main morph startup hook.
 # Keep this file focused on user-facing startup content:
 # - Additional autostart services
 # - Session components
@@ -49,7 +49,7 @@
 # Launch a panel such as yambar or waybar.
 launch sfwbar
 log_startup INFO "Started sfwbar."
-#launch waybar -c ./config/waybar-stackcomp.jsonc -s ./config/waybar-stackcomp.css
+#launch waybar -c ./config/waybar-morph.jsonc -s ./config/waybar-morph.css
 #log_startup INFO "Started waybar."
 
 # Enable notifications via org.freedesktop.Notifications (e.g. Thunderbird).

@@ -112,7 +112,7 @@ bool server_init(struct comp_server *server)
  */
 static bool write_temp_file(const char *content, char *out_path, size_t out_len)
 {
-    char tmpl[] = "/tmp/stackcomp-config-test-XXXXXX";
+    char tmpl[] = "/tmp/morph-config-test-XXXXXX";
     int fd = mkstemp(tmpl);
     if (fd < 0)
     {
@@ -267,8 +267,8 @@ static int test_invalid_tile_grid_command(void)
 static int test_missing_config_fails(void)
 {
     struct comp_config *cfg = NULL;
-    unsetenv("STACKCOMP_ALLOW_BUILTIN_FALLBACK");
-    bool ok = comp_config_load("/tmp/stackcomp-config-this-file-does-not-exist", &cfg);
+    unsetenv("MORPH_ALLOW_BUILTIN_FALLBACK");
+    bool ok = comp_config_load("/tmp/morph-config-this-file-does-not-exist", &cfg);
     if (ok)
     {
         fprintf(stderr, "missing config should fail instead of falling back silently\n");
@@ -284,9 +284,9 @@ static int test_missing_config_fails(void)
 static int test_missing_config_can_use_builtin_fallback(void)
 {
     struct comp_config *cfg = NULL;
-    setenv("STACKCOMP_ALLOW_BUILTIN_FALLBACK", "1", 1);
-    bool ok = comp_config_load("/tmp/stackcomp-config-this-file-does-not-exist", &cfg);
-    unsetenv("STACKCOMP_ALLOW_BUILTIN_FALLBACK");
+    setenv("MORPH_ALLOW_BUILTIN_FALLBACK", "1", 1);
+    bool ok = comp_config_load("/tmp/morph-config-this-file-does-not-exist", &cfg);
+    unsetenv("MORPH_ALLOW_BUILTIN_FALLBACK");
     if (!ok || !cfg)
     {
         fprintf(stderr, "missing config should use builtin fallback when enabled\n");

@@ -1,32 +1,32 @@
 #!/bin/sh
-# Production stackcomp session wrapper.
+# Production morph session wrapper.
 # - Resolves environment, config, logs, and session mode for real sessions.
 # - Keeps the managed startup/shutdown/reload frame active around user hooks.
-# - Starts the installed stackcomp binary instead of the repo-local build.
+# - Starts the installed morph binary instead of the repo-local build.
 ################################################################################
 
-STACKCOMP_SYSTEM_HOOK_DIR_DEFAULT="/etc/stackcomp"
-STACKCOMP_SYSTEM_CONFIG_DIR_DEFAULT="/etc/stackcomp"
-STACKCOMP_SYSTEM_CONFIG_FILE_DEFAULT="/etc/stackcomp/stackcomp.conf"
-STACKCOMP_BIN_DEFAULT="stackcomp"
+MORPH_SYSTEM_HOOK_DIR_DEFAULT="/etc/morph"
+MORPH_SYSTEM_CONFIG_DIR_DEFAULT="/etc/morph"
+MORPH_SYSTEM_CONFIG_FILE_DEFAULT="/etc/morph/morph.conf"
+MORPH_BIN_DEFAULT="morph"
 
 # Capture one caller-provided value so sourced environment files cannot silently
 # override the highest-priority layer.
-stackcomp_capture_caller_override() {
+morph_capture_caller_override() {
     var_name="$1"
     if eval "[ \"\${$var_name+x}\" ]"; then
-        eval "STACKCOMP_CALLER_HAS_$var_name=1"
-        eval "STACKCOMP_CALLER_VALUE_$var_name=\${$var_name}"
+        eval "MORPH_CALLER_HAS_$var_name=1"
+        eval "MORPH_CALLER_VALUE_$var_name=\${$var_name}"
     else
-        eval "STACKCOMP_CALLER_HAS_$var_name=0"
+        eval "MORPH_CALLER_HAS_$var_name=0"
     fi
 }
 
 # Restore one caller-provided value after lower-priority environment files were sourced.
-stackcomp_restore_caller_override() {
+morph_restore_caller_override() {
     var_name="$1"
-    if eval "[ \"\${STACKCOMP_CALLER_HAS_$var_name:-0}\" = 1 ]"; then
-        eval "$var_name=\${STACKCOMP_CALLER_VALUE_$var_name}"
+    if eval "[ \"\${MORPH_CALLER_HAS_$var_name:-0}\" = 1 ]"; then
+        eval "$var_name=\${MORPH_CALLER_VALUE_$var_name}"
         export "$var_name"
     fi
 }
@@ -37,18 +37,18 @@ stackcomp_restore_caller_override() {
 # Preserve caller overrides before lower-priority environment files are sourced.
 for var_name in \
     WAYLAND_DEBUG WLR_LOGTS _JAVA_AWT_WM_NONREPARENTING WMNAME \
-    STACKCOMP_X11 STACKCOMP_X11_DISPLAY STACKCOMP_DBG STACKCOMP_CONFIG \
-    STACKCOMP_LOG_DIR STACKCOMP_SYSTEM_HOOK_DIR STACKCOMP_SYSTEM_CONFIG_DIR \
-    STACKCOMP_SYSTEM_CONFIG_FILE STACKCOMP_BIN STACKCOMP_DEBUG_XDG \
+    MORPH_X11 MORPH_X11_DISPLAY MORPH_DBG MORPH_CONFIG \
+    MORPH_LOG_DIR MORPH_SYSTEM_HOOK_DIR MORPH_SYSTEM_CONFIG_DIR \
+    MORPH_SYSTEM_CONFIG_FILE MORPH_BIN MORPH_DEBUG_XDG \
     XKB_DEFAULT_LAYOUT XKB_DEFAULT_MODEL XKB_DEFAULT_VARIANT XKB_DEFAULT_OPTIONS
 do
-    stackcomp_capture_caller_override "$var_name"
+    morph_capture_caller_override "$var_name"
 done
 
-SYSTEM_CONFIG_DIR_BOOTSTRAP="${STACKCOMP_SYSTEM_CONFIG_DIR:-$STACKCOMP_SYSTEM_CONFIG_DIR_DEFAULT}"
+SYSTEM_CONFIG_DIR_BOOTSTRAP="${MORPH_SYSTEM_CONFIG_DIR:-$MORPH_SYSTEM_CONFIG_DIR_DEFAULT}"
 SYSTEM_ENV_FILE_DEFAULT="$SYSTEM_CONFIG_DIR_BOOTSTRAP/environment"
-SYSTEM_ENV_FILE="${STACKCOMP_ENV_FILE:-$SYSTEM_ENV_FILE_DEFAULT}"
-USER_ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/stackcomp/environment"
+SYSTEM_ENV_FILE="${MORPH_ENV_FILE:-$SYSTEM_ENV_FILE_DEFAULT}"
+USER_ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/morph/environment"
 ENV_FILE_NOTE="defaults-only (no user or system environment file found)"
 
 if [ -f "$SYSTEM_ENV_FILE" ]; then
@@ -67,12 +67,12 @@ fi
 
 for var_name in \
     WAYLAND_DEBUG WLR_LOGTS _JAVA_AWT_WM_NONREPARENTING WMNAME \
-    STACKCOMP_X11 STACKCOMP_X11_DISPLAY STACKCOMP_DBG STACKCOMP_CONFIG \
-    STACKCOMP_LOG_DIR STACKCOMP_SYSTEM_HOOK_DIR STACKCOMP_SYSTEM_CONFIG_DIR \
-    STACKCOMP_SYSTEM_CONFIG_FILE STACKCOMP_BIN STACKCOMP_DEBUG_XDG \
+    MORPH_X11 MORPH_X11_DISPLAY MORPH_DBG MORPH_CONFIG \
+    MORPH_LOG_DIR MORPH_SYSTEM_HOOK_DIR MORPH_SYSTEM_CONFIG_DIR \
+    MORPH_SYSTEM_CONFIG_FILE MORPH_BIN MORPH_DEBUG_XDG \
     XKB_DEFAULT_LAYOUT XKB_DEFAULT_MODEL XKB_DEFAULT_VARIANT XKB_DEFAULT_OPTIONS
 do
-    stackcomp_restore_caller_override "$var_name"
+    morph_restore_caller_override "$var_name"
 done
 
 # Launcher defaults (single source of truth for release behavior).
@@ -80,31 +80,31 @@ WAYLAND_DEBUG_DEFAULT=0
 WLR_LOGTS_DEFAULT=0
 JAVA_NONREPARENT_DEFAULT=1
 WMNAME_DEFAULT=LG3D
-STACKCOMP_X11_DEFAULT=
-STACKCOMP_X11_DISPLAY_DEFAULT=
-STACKCOMP_DBG_DEFAULT=0
-STACKCOMP_LOG_DIR_DEFAULT=
+MORPH_X11_DEFAULT=
+MORPH_X11_DISPLAY_DEFAULT=
+MORPH_DBG_DEFAULT=0
+MORPH_LOG_DIR_DEFAULT=
 
 # Apply defaults only when unset by caller or environment file.
 if [ -z "${WAYLAND_DEBUG+x}" ]; then WAYLAND_DEBUG="$WAYLAND_DEBUG_DEFAULT"; fi
 if [ -z "${WLR_LOGTS+x}" ]; then WLR_LOGTS="$WLR_LOGTS_DEFAULT"; fi
 if [ -z "${_JAVA_AWT_WM_NONREPARENTING+x}" ]; then _JAVA_AWT_WM_NONREPARENTING="$JAVA_NONREPARENT_DEFAULT"; fi
 if [ -z "${WMNAME+x}" ]; then WMNAME="$WMNAME_DEFAULT"; fi
-if [ -z "${STACKCOMP_X11+x}" ]; then STACKCOMP_X11="$STACKCOMP_X11_DEFAULT"; fi
-if [ -z "${STACKCOMP_X11_DISPLAY+x}" ]; then STACKCOMP_X11_DISPLAY="$STACKCOMP_X11_DISPLAY_DEFAULT"; fi
-if [ -z "${STACKCOMP_DBG+x}" ]; then STACKCOMP_DBG="$STACKCOMP_DBG_DEFAULT"; fi
-if [ -z "${STACKCOMP_LOG_DIR+x}" ]; then STACKCOMP_LOG_DIR="$STACKCOMP_LOG_DIR_DEFAULT"; fi
-if [ -z "${STACKCOMP_SYSTEM_HOOK_DIR+x}" ]; then STACKCOMP_SYSTEM_HOOK_DIR="$STACKCOMP_SYSTEM_HOOK_DIR_DEFAULT"; fi
-if [ -z "${STACKCOMP_SYSTEM_CONFIG_DIR+x}" ]; then STACKCOMP_SYSTEM_CONFIG_DIR="$STACKCOMP_SYSTEM_CONFIG_DIR_DEFAULT"; fi
-if [ -z "${STACKCOMP_SYSTEM_CONFIG_FILE+x}" ]; then STACKCOMP_SYSTEM_CONFIG_FILE="$STACKCOMP_SYSTEM_CONFIG_FILE_DEFAULT"; fi
-if [ -z "${STACKCOMP_BIN+x}" ]; then STACKCOMP_BIN="$STACKCOMP_BIN_DEFAULT"; fi
+if [ -z "${MORPH_X11+x}" ]; then MORPH_X11="$MORPH_X11_DEFAULT"; fi
+if [ -z "${MORPH_X11_DISPLAY+x}" ]; then MORPH_X11_DISPLAY="$MORPH_X11_DISPLAY_DEFAULT"; fi
+if [ -z "${MORPH_DBG+x}" ]; then MORPH_DBG="$MORPH_DBG_DEFAULT"; fi
+if [ -z "${MORPH_LOG_DIR+x}" ]; then MORPH_LOG_DIR="$MORPH_LOG_DIR_DEFAULT"; fi
+if [ -z "${MORPH_SYSTEM_HOOK_DIR+x}" ]; then MORPH_SYSTEM_HOOK_DIR="$MORPH_SYSTEM_HOOK_DIR_DEFAULT"; fi
+if [ -z "${MORPH_SYSTEM_CONFIG_DIR+x}" ]; then MORPH_SYSTEM_CONFIG_DIR="$MORPH_SYSTEM_CONFIG_DIR_DEFAULT"; fi
+if [ -z "${MORPH_SYSTEM_CONFIG_FILE+x}" ]; then MORPH_SYSTEM_CONFIG_FILE="$MORPH_SYSTEM_CONFIG_FILE_DEFAULT"; fi
+if [ -z "${MORPH_BIN+x}" ]; then MORPH_BIN="$MORPH_BIN_DEFAULT"; fi
 
-STACKCOMP_DBG_NOTE=""
-case "$STACKCOMP_DBG" in
+MORPH_DBG_NOTE=""
+case "$MORPH_DBG" in
     0|1|2) ;;
     *)
-    STACKCOMP_DBG_NOTE="invalid STACKCOMP_DBG='$STACKCOMP_DBG' (using default $STACKCOMP_DBG_DEFAULT)"
-    STACKCOMP_DBG="$STACKCOMP_DBG_DEFAULT"
+    MORPH_DBG_NOTE="invalid MORPH_DBG='$MORPH_DBG' (using default $MORPH_DBG_DEFAULT)"
+    MORPH_DBG="$MORPH_DBG_DEFAULT"
         ;;
 esac
 
@@ -114,13 +114,13 @@ export _JAVA_AWT_WM_NONREPARENTING
 export WMNAME
 # Tell the compositor to keep the lifecycle frame around the configured hooks
 # instead of executing those user snippets as the first entrypoint directly.
-export STACKCOMP_MANAGED_HOOKS=1
-export STACKCOMP_SYSTEM_HOOK_DIR
-export STACKCOMP_SYSTEM_CONFIG_DIR
-export STACKCOMP_BIN
-export STACKCOMP_HELPER_LIB="$STACKCOMP_SYSTEM_HOOK_DIR/shell-helpers.sh"
+export MORPH_MANAGED_HOOKS=1
+export MORPH_SYSTEM_HOOK_DIR
+export MORPH_SYSTEM_CONFIG_DIR
+export MORPH_BIN
+export MORPH_HELPER_LIB="$MORPH_SYSTEM_HOOK_DIR/shell-helpers.sh"
 
-# Forward optional XKB overrides from environment file/caller into stackcomp.
+# Forward optional XKB overrides from environment file/caller into morph.
 # Keep unset values untouched so libxkbcommon can use system defaults.
 if [ -n "${XKB_DEFAULT_LAYOUT+x}" ]; then export XKB_DEFAULT_LAYOUT; fi
 if [ -n "${XKB_DEFAULT_MODEL+x}" ]; then export XKB_DEFAULT_MODEL; fi
@@ -128,37 +128,37 @@ if [ -n "${XKB_DEFAULT_VARIANT+x}" ]; then export XKB_DEFAULT_VARIANT; fi
 if [ -n "${XKB_DEFAULT_OPTIONS+x}" ]; then export XKB_DEFAULT_OPTIONS; fi
 
 # Optional compositor XDG lifecycle debug flag.
-if [ -n "${STACKCOMP_DEBUG_XDG+x}" ]; then export STACKCOMP_DEBUG_XDG; fi
+if [ -n "${MORPH_DEBUG_XDG+x}" ]; then export MORPH_DEBUG_XDG; fi
 
 
 # Load shared helper functions before first use.
 # ==============================================================================
-. "$STACKCOMP_HELPER_LIB"
+. "$MORPH_HELPER_LIB"
 
 
 # Path Definitions and Log Setup
 # ==============================================================================
 # Use XDG state path by default for runtime logs.
 CONFIG_NOTE=""
-USER_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/stackcomp/stackcomp.conf"
+USER_CONFIG_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/morph/morph.conf"
 
-if [ -n "${STACKCOMP_CONFIG:-}" ]; then
-    if [ ! -r "$STACKCOMP_CONFIG" ]; then
-        printf 'Configured stackcomp config is not readable: %s\n' "$STACKCOMP_CONFIG" >&2
+if [ -n "${MORPH_CONFIG:-}" ]; then
+    if [ ! -r "$MORPH_CONFIG" ]; then
+        printf 'Configured morph config is not readable: %s\n' "$MORPH_CONFIG" >&2
         exit 1
     fi
-    CONFIG_FILE="$STACKCOMP_CONFIG"
+    CONFIG_FILE="$MORPH_CONFIG"
     if [ -z "$CONFIG_NOTE" ]; then
-        CONFIG_NOTE="override from STACKCOMP_CONFIG"
+        CONFIG_NOTE="override from MORPH_CONFIG"
     fi
 elif [ -r "$USER_CONFIG_FILE" ]; then
     CONFIG_FILE="$USER_CONFIG_FILE"
     CONFIG_NOTE="user config fallback"
-elif [ -r "$STACKCOMP_SYSTEM_CONFIG_FILE" ]; then
-    CONFIG_FILE="$STACKCOMP_SYSTEM_CONFIG_FILE"
+elif [ -r "$MORPH_SYSTEM_CONFIG_FILE" ]; then
+    CONFIG_FILE="$MORPH_SYSTEM_CONFIG_FILE"
     CONFIG_NOTE="system config fallback"
 else
-    if stackcomp_env_flag_is_enabled "${STACKCOMP_ALLOW_BUILTIN_FALLBACK:-0}"; then
+    if morph_env_flag_is_enabled "${MORPH_ALLOW_BUILTIN_FALLBACK:-0}"; then
         # Reaching this branch means every higher-priority config source has
         # already failed to resolve: explicit env overrides, user config, and
         # system config were all checked above. The empty CONFIG_FILE does not
@@ -167,33 +167,33 @@ else
         CONFIG_FILE=""
         CONFIG_NOTE="builtin fallback (no readable config file)"
     else
-        printf 'No readable stackcomp config found in user or system locations.\n' >&2
+        printf 'No readable morph config found in user or system locations.\n' >&2
         exit 1
     fi
 fi
 if [ -n "$CONFIG_FILE" ]; then
-    export STACKCOMP_CONFIG="$CONFIG_FILE"
+    export MORPH_CONFIG="$CONFIG_FILE"
 else
-    unset STACKCOMP_CONFIG
+    unset MORPH_CONFIG
 fi
 
 # Export the user-facing hook commands from the active config so the managed
 # shutdown fallback can still honor them if the compositor dies before its own
 # shutdown hook path is reached.
-STACKCOMP_USER_STARTUP_HOOK_CMD="$(stackcomp_config_hook_from_file startup "$CONFIG_FILE")"
-STACKCOMP_USER_SHUTDOWN_HOOK_CMD="$(stackcomp_config_hook_from_file shutdown "$CONFIG_FILE")"
-STACKCOMP_USER_RELOAD_HOOK_CMD="$(stackcomp_config_hook_from_file reload "$CONFIG_FILE")"
+MORPH_USER_STARTUP_HOOK_CMD="$(morph_config_hook_from_file startup "$CONFIG_FILE")"
+MORPH_USER_SHUTDOWN_HOOK_CMD="$(morph_config_hook_from_file shutdown "$CONFIG_FILE")"
+MORPH_USER_RELOAD_HOOK_CMD="$(morph_config_hook_from_file reload "$CONFIG_FILE")"
 # Exporting empty values is intentional here: the managed scripts then fall
 # back to the XDG hook locations instead of guessing from unrelated paths.
-export STACKCOMP_USER_STARTUP_HOOK_CMD
-export STACKCOMP_USER_SHUTDOWN_HOOK_CMD
-export STACKCOMP_USER_RELOAD_HOOK_CMD
+export MORPH_USER_STARTUP_HOOK_CMD
+export MORPH_USER_SHUTDOWN_HOOK_CMD
+export MORPH_USER_RELOAD_HOOK_CMD
 
 STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
-STATE_DIR="$STATE_HOME/stackcomp"
-LOG_DIR="${STACKCOMP_LOG_DIR:-$STATE_HOME/stackcomp}"
-LOG_FILE="$LOG_DIR/stackcomp.log"
-CRASH_LOG_FILE="$LOG_DIR/stackcomp-crash.log"
+STATE_DIR="$STATE_HOME/morph"
+LOG_DIR="${MORPH_LOG_DIR:-$STATE_HOME/morph}"
+LOG_FILE="$LOG_DIR/morph.log"
+CRASH_LOG_FILE="$LOG_DIR/morph-crash.log"
 SESSION_MODE_NOTE=""
 X11_PROBE_NOTE=""
 STARTUP_LOG_BASELINE=0
@@ -213,14 +213,14 @@ if choose_reachable_x11_display; then
     export DISPLAY="$CHOSEN_X11_DISPLAY"
     export WLR_BACKENDS=x11
     export WLR_WL_SOCKET="wayland-nested"
-    export STACKCOMP_SESSION_MODE=nested
+    export MORPH_SESSION_MODE=nested
     SESSION_MODE_NOTE="nested-x11"
     echo "Starting in Nested-Mode under X11 (DISPLAY=$CHOSEN_X11_DISPLAY)..."
 elif [ -n "${WAYLAND_DISPLAY:-}" ]; then
     # Wayland session: use "wayland-nested" to avoid socket collisions.
     export WLR_BACKENDS=wayland
     export WLR_WL_SOCKET="wayland-nested"
-    export STACKCOMP_SESSION_MODE=nested
+    export MORPH_SESSION_MODE=nested
     SESSION_MODE_NOTE="nested-wayland"
     echo "Starting in Nested-Mode under Wayland..."
 else
@@ -231,7 +231,7 @@ else
     unset DISPLAY
     export WLR_BACKENDS=drm,libinput
     unset WLR_WL_SOCKET
-    export STACKCOMP_SESSION_MODE=native
+    export MORPH_SESSION_MODE=native
     SESSION_MODE_NOTE="native-tty"
 fi
 
@@ -239,86 +239,86 @@ fi
 # ==============================================================================
 # Keep native sessions X11-capable by default, but avoid unnecessary bridge
 # startup in nested sessions unless explicitly requested.
-STACKCOMP_X11_NOTE=""
+MORPH_X11_NOTE=""
 if [ "$WLR_BACKENDS" = "x11" ] || [ "$WLR_BACKENDS" = "wayland" ]; then
-    STACKCOMP_X11_SESSION_DEFAULT=0
+    MORPH_X11_SESSION_DEFAULT=0
 else
-    STACKCOMP_X11_SESSION_DEFAULT=1
+    MORPH_X11_SESSION_DEFAULT=1
 fi
 
-if [ -z "$STACKCOMP_X11" ]; then
-    STACKCOMP_X11="$STACKCOMP_X11_SESSION_DEFAULT"
+if [ -z "$MORPH_X11" ]; then
+    MORPH_X11="$MORPH_X11_SESSION_DEFAULT"
 else
-    case "$STACKCOMP_X11" in
+    case "$MORPH_X11" in
         0|1) ;;
         *)
-            STACKCOMP_X11_NOTE="invalid STACKCOMP_X11='$STACKCOMP_X11' (using session default $STACKCOMP_X11_SESSION_DEFAULT)"
-            STACKCOMP_X11="$STACKCOMP_X11_SESSION_DEFAULT"
+            MORPH_X11_NOTE="invalid MORPH_X11='$MORPH_X11' (using session default $MORPH_X11_SESSION_DEFAULT)"
+            MORPH_X11="$MORPH_X11_SESSION_DEFAULT"
             ;;
     esac
 fi
-export STACKCOMP_X11
+export MORPH_X11
 
-STACKCOMP_X11_DISPLAY_NOTE=""
-if [ -n "$STACKCOMP_X11_DISPLAY" ]; then
-    case "$STACKCOMP_X11_DISPLAY" in
+MORPH_X11_DISPLAY_NOTE=""
+if [ -n "$MORPH_X11_DISPLAY" ]; then
+    case "$MORPH_X11_DISPLAY" in
         :[0-9]*)
-            if [ "$STACKCOMP_X11_DISPLAY" = ":" ]; then
-                STACKCOMP_X11_DISPLAY_NOTE="invalid STACKCOMP_X11_DISPLAY=':' (using auto :2..:99)"
-                STACKCOMP_X11_DISPLAY=""
+            if [ "$MORPH_X11_DISPLAY" = ":" ]; then
+                MORPH_X11_DISPLAY_NOTE="invalid MORPH_X11_DISPLAY=':' (using auto :2..:99)"
+                MORPH_X11_DISPLAY=""
             fi
             ;;
         *)
-            STACKCOMP_X11_DISPLAY_NOTE="invalid STACKCOMP_X11_DISPLAY='$STACKCOMP_X11_DISPLAY' (using auto :2..:99)"
-            STACKCOMP_X11_DISPLAY=""
+            MORPH_X11_DISPLAY_NOTE="invalid MORPH_X11_DISPLAY='$MORPH_X11_DISPLAY' (using auto :2..:99)"
+            MORPH_X11_DISPLAY=""
             ;;
     esac
 fi
 
-if [ -n "$STACKCOMP_X11_DISPLAY" ]; then
-    export STACKCOMP_X11_DISPLAY
+if [ -n "$MORPH_X11_DISPLAY" ]; then
+    export MORPH_X11_DISPLAY
 fi
 
 # Log settings
 # ==============================================================================
-STACKCOMP_LOG_LEVEL="error"
-STACKCOMP_ENABLE_CRASH_HANDLER=0
-case "$STACKCOMP_DBG" in
+MORPH_LOG_LEVEL="error"
+MORPH_ENABLE_CRASH_HANDLER=0
+case "$MORPH_DBG" in
     1)
-        STACKCOMP_LOG_LEVEL="info"
+        MORPH_LOG_LEVEL="info"
         ;;
     2)
-        STACKCOMP_LOG_LEVEL="debug"
-        STACKCOMP_ENABLE_CRASH_HANDLER=1
+        MORPH_LOG_LEVEL="debug"
+        MORPH_ENABLE_CRASH_HANDLER=1
         ;;
 esac
-export STACKCOMP_LOG_LEVEL
-export STACKCOMP_ENABLE_CRASH_HANDLER
+export MORPH_LOG_LEVEL
+export MORPH_ENABLE_CRASH_HANDLER
 
 # Use separate logs in nested mode to avoid overwriting main logs.
 if [ "$WLR_BACKENDS" = "x11" ] || [ "$WLR_BACKENDS" = "wayland" ]; then
-    export STACKCOMP_STARTUP_LOG_FILE="$LOG_DIR/stackcomp-nested-startup.log"
-    export STACKCOMP_SHUTDOWN_LOG_FILE="$LOG_DIR/stackcomp-nested-shutdown.log"
+    export MORPH_STARTUP_LOG_FILE="$LOG_DIR/morph-nested-startup.log"
+    export MORPH_SHUTDOWN_LOG_FILE="$LOG_DIR/morph-nested-shutdown.log"
 else
-    export STACKCOMP_STARTUP_LOG_FILE="$LOG_DIR/stackcomp-startup.log"
-    export STACKCOMP_SHUTDOWN_LOG_FILE="$LOG_DIR/stackcomp-shutdown.log"
+    export MORPH_STARTUP_LOG_FILE="$LOG_DIR/morph-startup.log"
+    export MORPH_SHUTDOWN_LOG_FILE="$LOG_DIR/morph-shutdown.log"
 fi
 
 # Point shared logging helpers at the startup log before the first message.
-export CURRENT_LOG_FILE="$STACKCOMP_STARTUP_LOG_FILE"
+export CURRENT_LOG_FILE="$MORPH_STARTUP_LOG_FILE"
 
 # Capture per-file baselines so the error summary only scans this run.
-STARTUP_LOG_BASELINE=$(line_count_or_zero "$STACKCOMP_STARTUP_LOG_FILE")
+STARTUP_LOG_BASELINE=$(line_count_or_zero "$MORPH_STARTUP_LOG_FILE")
 CORE_LOG_BASELINE=$(line_count_or_zero "$LOG_FILE")
 CRASH_LOG_BASELINE=$(line_count_or_zero "$CRASH_LOG_FILE")
 
 
 # Dynamic program list shared by startup.sh and system_shutdown.sh for shutdown cleanup.
 # ==============================================================================
-export STACKCOMP_SHUTDOWN_LIST="$STATE_DIR/shutdown_list.nfo"
+export MORPH_SHUTDOWN_LIST="$STATE_DIR/shutdown_list.nfo"
 # Recreate the shutdown tracker on every run so stale entries never survive
 # into the next session.
-: > "$STACKCOMP_SHUTDOWN_LIST"
+: > "$MORPH_SHUTDOWN_LIST"
 log_startup INFO "============================= N E W  S T A R T ================================"
 log_startup INFO "Cleared shutdown list file."
 
@@ -331,35 +331,35 @@ log_startup INFO "Environment source:           $ENV_FILE_NOTE"
 log_startup INFO "Selected session mode:        $SESSION_MODE_NOTE"
 log_startup INFO "X11 probe details:            $X11_PROBE_NOTE"
 log_startup INFO "Config file path:             $CONFIG_FILE ($CONFIG_NOTE)"
-log_startup INFO "Builtin fallback enabled:     ${STACKCOMP_ALLOW_BUILTIN_FALLBACK:-0}"
-log_startup INFO "Managed hooks enabled:        $STACKCOMP_MANAGED_HOOKS"
-log_startup INFO "Managed hook directory:       $STACKCOMP_SYSTEM_HOOK_DIR"
-log_startup INFO "Managed config directory:     $STACKCOMP_SYSTEM_CONFIG_DIR"
-log_startup INFO "Compositor binary:            $STACKCOMP_BIN"
+log_startup INFO "Builtin fallback enabled:     ${MORPH_ALLOW_BUILTIN_FALLBACK:-0}"
+log_startup INFO "Managed hooks enabled:        $MORPH_MANAGED_HOOKS"
+log_startup INFO "Managed hook directory:       $MORPH_SYSTEM_HOOK_DIR"
+log_startup INFO "Managed config directory:     $MORPH_SYSTEM_CONFIG_DIR"
+log_startup INFO "Compositor binary:            $MORPH_BIN"
 log_startup INFO "WLR_BACKENDS:                 $WLR_BACKENDS..."
 log_startup INFO "WLR_WL_SOCKET:                ${WLR_WL_SOCKET:-unset}"
-log_startup INFO "STACKCOMP_DBG:                $STACKCOMP_DBG"
-log_startup INFO "STACKCOMP_LOG_LEVEL:          $STACKCOMP_LOG_LEVEL"
-log_startup INFO "Crash handler enabled:        $STACKCOMP_ENABLE_CRASH_HANDLER"
-log_startup INFO "STACKCOMP_X11:                $STACKCOMP_X11"
-log_startup INFO "STACKCOMP_X11_DISPLAY:        ${STACKCOMP_X11_DISPLAY:-auto (:2..:99)}"
+log_startup INFO "MORPH_DBG:                $MORPH_DBG"
+log_startup INFO "MORPH_LOG_LEVEL:          $MORPH_LOG_LEVEL"
+log_startup INFO "Crash handler enabled:        $MORPH_ENABLE_CRASH_HANDLER"
+log_startup INFO "MORPH_X11:                $MORPH_X11"
+log_startup INFO "MORPH_X11_DISPLAY:        ${MORPH_X11_DISPLAY:-auto (:2..:99)}"
 log_startup INFO "Log file path:                $LOG_FILE"
 log_startup INFO "Crash log file path:          $CRASH_LOG_FILE"
-log_startup INFO "Startup log file:             $STACKCOMP_STARTUP_LOG_FILE"
-log_startup INFO "Shutdown log file:            $STACKCOMP_SHUTDOWN_LOG_FILE"
-log_startup INFO "Shutdown list file:           $STACKCOMP_SHUTDOWN_LIST"
+log_startup INFO "Startup log file:             $MORPH_STARTUP_LOG_FILE"
+log_startup INFO "Shutdown log file:            $MORPH_SHUTDOWN_LOG_FILE"
+log_startup INFO "Shutdown list file:           $MORPH_SHUTDOWN_LIST"
 
-if [ -n "$STACKCOMP_DBG_NOTE" ]; then
-    log_startup WARN "$STACKCOMP_DBG_NOTE"
+if [ -n "$MORPH_DBG_NOTE" ]; then
+    log_startup WARN "$MORPH_DBG_NOTE"
 fi
-if [ -n "$STACKCOMP_X11_NOTE" ]; then
-    log_startup WARN "$STACKCOMP_X11_NOTE"
+if [ -n "$MORPH_X11_NOTE" ]; then
+    log_startup WARN "$MORPH_X11_NOTE"
 fi
-if [ -n "$STACKCOMP_X11_DISPLAY_NOTE" ]; then
-    log_startup WARN "$STACKCOMP_X11_DISPLAY_NOTE"
+if [ -n "$MORPH_X11_DISPLAY_NOTE" ]; then
+    log_startup WARN "$MORPH_X11_DISPLAY_NOTE"
 fi
 
-if [ "$STACKCOMP_DBG" -ge 1 ]; then
+if [ "$MORPH_DBG" -ge 1 ]; then
     log_startup INFO "Debug summary:"
     log_startup INFO "--------------------------------------------------------------------------------"
     log_startup INFO "WAYLAND_DEBUG:                $WAYLAND_DEBUG"
@@ -368,7 +368,7 @@ if [ "$STACKCOMP_DBG" -ge 1 ]; then
     log_startup INFO "WMNAME:                       $WMNAME"
 fi
 
-if stackcomp_env_flag_is_enabled "${STACKCOMP_RESOLVE_ONLY:-0}"; then
+if morph_env_flag_is_enabled "${MORPH_RESOLVE_ONLY:-0}"; then
     log_startup INFO "Resolve-only mode requested; skipping compositor start after priority checks."
     exit 0
 fi
@@ -378,14 +378,14 @@ fi
 # ==============================================================================
 # Run the compositor without exec so the launcher can inspect the exit status
 # and decide whether managed shutdown cleanup is needed.
-if [ "$STACKCOMP_ENABLE_CRASH_HANDLER" -eq 1 ]; then
+if [ "$MORPH_ENABLE_CRASH_HANDLER" -eq 1 ]; then
     CRASH_HANDLER_NOTE="enabled (--crash-log)"
 else
     CRASH_HANDLER_NOTE="disabled (--no-crash-handler)"
 fi
-log_startup INFO "Execution mode: log-level=$STACKCOMP_LOG_LEVEL, crash-handler=$CRASH_HANDLER_NOTE"
-log_startup INFO "Capturing compositor stdout/stderr into startup log: $STACKCOMP_STARTUP_LOG_FILE"
-run_stackcomp_with_capture
+log_startup INFO "Execution mode: log-level=$MORPH_LOG_LEVEL, crash-handler=$CRASH_HANDLER_NOTE"
+log_startup INFO "Capturing compositor stdout/stderr into startup log: $MORPH_STARTUP_LOG_FILE"
+run_morph_with_capture
 EXIT_CODE=$?
 
 # Check exit status for crash detection.
@@ -396,7 +396,7 @@ else
     if [ "$EXIT_CODE" -eq 137 ]; then
         log_startup ERROR "Exit 137 means SIGKILL (often debugger stop, external kill, or OOM killer)."
     fi
-    if [ "$STACKCOMP_ENABLE_CRASH_HANDLER" -eq 1 ]; then
+    if [ "$MORPH_ENABLE_CRASH_HANDLER" -eq 1 ]; then
         if [ -s "$CRASH_LOG_FILE" ]; then
             log_startup ERROR "Check the detailed crash log at: $CRASH_LOG_FILE."
         elif [ -f "$CRASH_LOG_FILE" ]; then
@@ -415,7 +415,7 @@ fi
 # the compositor's managed hook dispatch run the normal shutdown sequence.
 # ==============================================================================
 if [ "$EXIT_CODE" -ne 0 ]; then
-    system_shutdown_hook="$STACKCOMP_SYSTEM_HOOK_DIR/system_shutdown.sh"
+    system_shutdown_hook="$MORPH_SYSTEM_HOOK_DIR/system_shutdown.sh"
 
     # Normal exits already ran through the compositor-managed shutdown hook.
     # This path exists only for crashes and other early aborts.

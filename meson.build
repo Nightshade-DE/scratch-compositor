@@ -1,5 +1,5 @@
 project(
-  'stackcomp',
+  'morph',
   'c',
   version: '0.1.0',
   default_options: [
@@ -23,8 +23,8 @@ wayland_protocols = dependency('wayland-protocols', version: '>=1.32')
 wayland_scanner = find_program('wayland-scanner')
 sh_prog = find_program('sh')
 
-stackcomp_runtime_dir = get_option('sysconfdir') / 'stackcomp'
-stackcomp_doc_dir = get_option('datadir') / 'doc' / 'stackcomp'
+morph_runtime_dir = get_option('sysconfdir') / 'morph'
+morph_doc_dir = get_option('datadir') / 'doc' / 'morph'
 
 xdg_shell_xml = wayland_protocols.get_variable('pkgdatadir') / 'stable/xdg-shell/xdg-shell.xml'
 xdg_shell_server_h = custom_target(
@@ -79,7 +79,7 @@ pointer_constraints_server_h = custom_target(
 )
 
 executable(
-  'stackcomp',
+  'morph',
   'src/crash_handler.c',
   'src/main.c',
   'src/config.c',
@@ -96,7 +96,7 @@ executable(
 )
 
 config_test = executable(
-  'stackcomp-test-config',
+  'morph-test-config',
   'tests/test_config.c',
   'src/config.c',
   dependencies: [wlroots, pixman, wayland_server, xkbcommon, m_dep],
@@ -112,11 +112,11 @@ test(
 
 install_data(
   files(
-    'config/stackcomp.conf',
+    'config/morph.conf',
     'config/environment',
     'config/portals',
   ),
-  install_dir: stackcomp_runtime_dir,
+  install_dir: morph_runtime_dir,
 )
 
 install_data(
@@ -129,19 +129,19 @@ install_data(
     'scripts/system_shutdown.sh',
     'scripts/system_reload.sh',
   ),
-  install_dir: stackcomp_runtime_dir,
+  install_dir: morph_runtime_dir,
   install_mode: 'rwxr-xr-x',
 )
 
 install_data(
-  files('scripts/stackcomp-session'),
+  files('scripts/morph-session'),
   install_dir: get_option('bindir'),
-  rename: 'stackcomp-session',
+  rename: 'morph-session',
   install_mode: 'rwxr-xr-x',
 )
 
 install_data(
-  files('data/stackcomp.desktop'),
+  files('data/morph.desktop'),
   install_dir: get_option('datadir') / 'wayland-sessions',
 )
 
@@ -154,8 +154,8 @@ install_data(
     'TESTING.md',
     'config/ENVIRONMENT.md',
     'testing/LAUNCHER.md',
-    'testing/stackcomp.conf',
+    'testing/morph.conf',
     'testing/test-howto_start-variants.nfo',
   ),
-  install_dir: stackcomp_doc_dir,
+  install_dir: morph_doc_dir,
 )

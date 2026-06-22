@@ -32,7 +32,7 @@ assert_equals() {
 }
 
 make_tmpdir() {
-    mktemp -d "${TMPDIR:-/tmp}/stackcomp-shell-test.XXXXXX"
+    mktemp -d "${TMPDIR:-/tmp}/morph-shell-test.XXXXXX"
 }
 
 assert_command_fails() {
@@ -61,10 +61,10 @@ EOF
 
     export PATH="$tmpdir/bin:$PATH"
     export CURRENT_LOG_FILE="$tmpdir/startup.log"
-    export STACKCOMP_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
-    export STACKCOMP_SESSION_MODE=native
+    export MORPH_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
+    export MORPH_SESSION_MODE=native
     : > "$CURRENT_LOG_FILE"
-    : > "$STACKCOMP_SHUTDOWN_LIST"
+    : > "$MORPH_SHUTDOWN_LIST"
 
     # shellcheck disable=SC1090
     . "$repo_root/scripts/shell-helpers.sh"
@@ -73,7 +73,7 @@ EOF
     launch_nokill "$tmpdir/bin/dummy-service"
     launch_nested "$tmpdir/bin/dummy-service"
 
-    count=$(grep -c '^dummy-service$' "$STACKCOMP_SHUTDOWN_LIST" || true)
+    count=$(grep -c '^dummy-service$' "$MORPH_SHUTDOWN_LIST" || true)
     assert_equals "1" "$count" "launch helper shutdown tracker count"
     assert_file_contains "$CURRENT_LOG_FILE" "Starting $tmpdir/bin/dummy-service (registered for automatic shutdown)."
     assert_file_contains "$CURRENT_LOG_FILE" "Starting $tmpdir/bin/dummy-service (not registered for shutdown)."
@@ -101,10 +101,10 @@ EOF
 
     export PATH="$tmpdir/bin:$PATH"
     export CURRENT_LOG_FILE="$tmpdir/reload.log"
-    export STACKCOMP_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
+    export MORPH_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
     export PKILL_LOG_FILE="$tmpdir/pkill.log"
     : > "$CURRENT_LOG_FILE"
-    : > "$STACKCOMP_SHUTDOWN_LIST"
+    : > "$MORPH_SHUTDOWN_LIST"
     : > "$PKILL_LOG_FILE"
 
     pkill() {
@@ -118,7 +118,7 @@ EOF
     launch "$tmpdir/bin/dummy-service"
     reload "$tmpdir/bin/dummy-service"
 
-    count=$(grep -c '^dummy-service$' "$STACKCOMP_SHUTDOWN_LIST" || true)
+    count=$(grep -c '^dummy-service$' "$MORPH_SHUTDOWN_LIST" || true)
     assert_equals "1" "$count" "reload helper shutdown tracker count"
     assert_file_contains "$CURRENT_LOG_FILE" "Reloading $tmpdir/bin/dummy-service."
     assert_file_contains "$CURRENT_LOG_FILE" "Stopped running instance for reload: dummy-service"
@@ -146,10 +146,10 @@ EOF
 
     export PATH="$tmpdir/bin:$PATH"
     export CURRENT_LOG_FILE="$tmpdir/reload-once.log"
-    export STACKCOMP_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
+    export MORPH_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
     export PKILL_LOG_FILE="$tmpdir/pkill.log"
     : > "$CURRENT_LOG_FILE"
-    : > "$STACKCOMP_SHUTDOWN_LIST"
+    : > "$MORPH_SHUTDOWN_LIST"
     : > "$PKILL_LOG_FILE"
 
     pkill() {
@@ -169,7 +169,7 @@ EOF
 
     reload_once "$tmpdir/bin/dummy-service"
 
-    count=$(grep -c '^dummy-service$' "$STACKCOMP_SHUTDOWN_LIST" || true)
+    count=$(grep -c '^dummy-service$' "$MORPH_SHUTDOWN_LIST" || true)
     assert_equals "1" "$count" "reload_once shutdown tracker count"
     assert_file_contains "$CURRENT_LOG_FILE" "Starting component through reload_once: $tmpdir/bin/dummy-service"
     assert_file_contains "$CURRENT_LOG_FILE" "[reload_once:$tmpdir/bin/dummy-service] dummy reload_once output"
@@ -183,10 +183,10 @@ test_reload_once_skips_already_running_component() {
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
     export CURRENT_LOG_FILE="$tmpdir/reload-once.log"
-    export STACKCOMP_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
+    export MORPH_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
     export PKILL_LOG_FILE="$tmpdir/pkill.log"
     : > "$CURRENT_LOG_FILE"
-    : > "$STACKCOMP_SHUTDOWN_LIST"
+    : > "$MORPH_SHUTDOWN_LIST"
     : > "$PKILL_LOG_FILE"
 
     pkill() {
@@ -206,7 +206,7 @@ test_reload_once_skips_already_running_component() {
 
     reload_once /usr/bin/mutagen
 
-    count=$(grep -c '^mutagen$' "$STACKCOMP_SHUTDOWN_LIST" || true)
+    count=$(grep -c '^mutagen$' "$MORPH_SHUTDOWN_LIST" || true)
     assert_equals "1" "$count" "reload_once running tracker count"
     assert_file_contains "$CURRENT_LOG_FILE" "Skipping reload_once for already running component: mutagen"
 
@@ -219,19 +219,19 @@ test_system_startup_nested_sets_wayland_display() {
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
     export COMP_ROOT_DIR="$repo_root"
-    export STACKCOMP_HELPER_LIB="$repo_root/scripts/shell-helpers.sh"
-    export STACKCOMP_STARTUP_LOG_FILE="$tmpdir/startup.log"
-    export STACKCOMP_SESSION_MODE=nested
+    export MORPH_HELPER_LIB="$repo_root/scripts/shell-helpers.sh"
+    export MORPH_STARTUP_LOG_FILE="$tmpdir/startup.log"
+    export MORPH_SESSION_MODE=nested
     export WLR_WL_SOCKET="wayland-test-socket"
     export XDG_CONFIG_HOME="$tmpdir/xdg-config"
     unset WAYLAND_DISPLAY
-    : > "$STACKCOMP_STARTUP_LOG_FILE"
+    : > "$MORPH_STARTUP_LOG_FILE"
 
     # shellcheck disable=SC1090
     . "$repo_root/scripts/system_startup.sh"
 
     assert_equals "wayland-test-socket" "${WAYLAND_DISPLAY:-}" "nested WAYLAND_DISPLAY"
-    assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Nested clients use WAYLAND_DISPLAY=wayland-test-socket."
+    assert_file_contains "$MORPH_STARTUP_LOG_FILE" "Nested clients use WAYLAND_DISPLAY=wayland-test-socket."
 
     rm -rf "$tmpdir"
     trap - EXIT HUP INT TERM
@@ -261,14 +261,14 @@ EOF
 
     export PATH="$tmpdir/bin:$PATH"
     export COMP_ROOT_DIR="$repo_root"
-    export STACKCOMP_HELPER_LIB="$repo_root/scripts/shell-helpers.sh"
-    export STACKCOMP_STARTUP_LOG_FILE="$tmpdir/startup.log"
-    export STACKCOMP_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
-    export STACKCOMP_USER_RELOAD_HOOK_CMD="$tmpdir/reload-hook.sh"
+    export MORPH_HELPER_LIB="$repo_root/scripts/shell-helpers.sh"
+    export MORPH_STARTUP_LOG_FILE="$tmpdir/startup.log"
+    export MORPH_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
+    export MORPH_USER_RELOAD_HOOK_CMD="$tmpdir/reload-hook.sh"
     export HOOK_SERVICE="$tmpdir/bin/dummy-service"
     export PKILL_LOG_FILE="$tmpdir/pkill.log"
-    : > "$STACKCOMP_STARTUP_LOG_FILE"
-    : > "$STACKCOMP_SHUTDOWN_LIST"
+    : > "$MORPH_STARTUP_LOG_FILE"
+    : > "$MORPH_SHUTDOWN_LIST"
     : > "$PKILL_LOG_FILE"
 
     pkill() {
@@ -279,10 +279,10 @@ EOF
     # shellcheck disable=SC1090
     . "$repo_root/scripts/system_reload.sh"
 
-    assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Starting managed reload hook."
-    assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Sourcing user reload hook file from config: $tmpdir/reload-hook.sh"
-    assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Reloading $tmpdir/bin/dummy-service."
-    assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Managed reload hook completed."
+    assert_file_contains "$MORPH_STARTUP_LOG_FILE" "Starting managed reload hook."
+    assert_file_contains "$MORPH_STARTUP_LOG_FILE" "Sourcing user reload hook file from config: $tmpdir/reload-hook.sh"
+    assert_file_contains "$MORPH_STARTUP_LOG_FILE" "Reloading $tmpdir/bin/dummy-service."
+    assert_file_contains "$MORPH_STARTUP_LOG_FILE" "Managed reload hook completed."
     assert_file_contains "$PKILL_LOG_FILE" "-x dummy-service"
 
     rm -rf "$tmpdir"
@@ -298,7 +298,7 @@ test_system_startup_native_runs_managed_portals() {
     ln -s "$repo_root/scripts/shell-helpers.sh" "$tmpdir/scripts/shell-helpers.sh"
     cat > "$tmpdir/config/portals" <<'EOF'
 #!/bin/sh
-stackcomp_start_portals() {
+morph_start_portals() {
     : "${PORTAL_MARKER_FILE:?PORTAL_MARKER_FILE is not set}"
     printf 'managed portals called\n' > "$PORTAL_MARKER_FILE"
     log_startup INFO "Stub portal runtime started."
@@ -307,13 +307,13 @@ EOF
     chmod +x "$tmpdir/config/portals"
 
     export COMP_ROOT_DIR="$tmpdir"
-    export STACKCOMP_HELPER_LIB="$tmpdir/scripts/shell-helpers.sh"
-    export STACKCOMP_STARTUP_LOG_FILE="$tmpdir/startup.log"
-    export STACKCOMP_SESSION_MODE=native
-    export STACKCOMP_SYSTEM_CONFIG_DIR="$tmpdir/config"
+    export MORPH_HELPER_LIB="$tmpdir/scripts/shell-helpers.sh"
+    export MORPH_STARTUP_LOG_FILE="$tmpdir/startup.log"
+    export MORPH_SESSION_MODE=native
+    export MORPH_SYSTEM_CONFIG_DIR="$tmpdir/config"
     export XDG_CONFIG_HOME="$tmpdir/xdg-config"
     export PORTAL_MARKER_FILE="$tmpdir/portal-marker"
-    : > "$STACKCOMP_STARTUP_LOG_FILE"
+    : > "$MORPH_STARTUP_LOG_FILE"
 
     # Source the managed runtime directly so the test can validate ordering
     # without having to start the full compositor binary.
@@ -321,8 +321,8 @@ EOF
     . "$tmpdir/scripts/system_startup.sh"
 
     assert_file_contains "$PORTAL_MARKER_FILE" "managed portals called"
-    assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Loaded managed portals file: $tmpdir/config/portals."
-    assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Stub portal runtime started."
+    assert_file_contains "$MORPH_STARTUP_LOG_FILE" "Loaded managed portals file: $tmpdir/config/portals."
+    assert_file_contains "$MORPH_STARTUP_LOG_FILE" "Stub portal runtime started."
 
     rm -rf "$tmpdir"
     trap - EXIT HUP INT TERM
@@ -333,14 +333,14 @@ test_system_startup_runs_user_hook_command() {
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
     export COMP_ROOT_DIR="$repo_root"
-    export STACKCOMP_HELPER_LIB="$repo_root/scripts/shell-helpers.sh"
-    export STACKCOMP_STARTUP_LOG_FILE="$tmpdir/startup.log"
-    export STACKCOMP_SESSION_MODE=nested
+    export MORPH_HELPER_LIB="$repo_root/scripts/shell-helpers.sh"
+    export MORPH_STARTUP_LOG_FILE="$tmpdir/startup.log"
+    export MORPH_SESSION_MODE=nested
     export WLR_WL_SOCKET="wayland-test-socket"
     export XDG_CONFIG_HOME="$tmpdir/xdg-config"
     export USER_STARTUP_MARKER="$tmpdir/user-startup.marker"
-    export STACKCOMP_USER_STARTUP_HOOK_CMD='printf "user startup hook\n" > "$USER_STARTUP_MARKER"'
-    : > "$STACKCOMP_STARTUP_LOG_FILE"
+    export MORPH_USER_STARTUP_HOOK_CMD='printf "user startup hook\n" > "$USER_STARTUP_MARKER"'
+    : > "$MORPH_STARTUP_LOG_FILE"
 
     # In managed mode the startup runtime receives the resolved config command
     # through the environment rather than reparsing the config itself.
@@ -348,13 +348,13 @@ test_system_startup_runs_user_hook_command() {
     . "$repo_root/scripts/system_startup.sh"
 
     assert_file_contains "$USER_STARTUP_MARKER" "user startup hook"
-    assert_file_contains "$STACKCOMP_STARTUP_LOG_FILE" "Running user startup hook from config."
+    assert_file_contains "$MORPH_STARTUP_LOG_FILE" "Running user startup hook from config."
 
     rm -rf "$tmpdir"
     trap - EXIT HUP INT TERM
 }
 
-test_stackcomp_config_hook_from_file_reads_hooks_section() {
+test_morph_config_hook_from_file_reads_hooks_section() {
     tmpdir=$(make_tmpdir)
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
@@ -371,9 +371,9 @@ EOF
     # shellcheck disable=SC1090
     . "$repo_root/scripts/shell-helpers.sh"
 
-    startup_hook=$(stackcomp_config_hook_from_file startup "$tmpdir/config.conf")
-    shutdown_hook=$(stackcomp_config_hook_from_file shutdown "$tmpdir/config.conf")
-    reload_hook=$(stackcomp_config_hook_from_file reload "$tmpdir/config.conf")
+    startup_hook=$(morph_config_hook_from_file startup "$tmpdir/config.conf")
+    shutdown_hook=$(morph_config_hook_from_file shutdown "$tmpdir/config.conf")
+    reload_hook=$(morph_config_hook_from_file reload "$tmpdir/config.conf")
 
     assert_equals "/tmp/startup-hook" "$startup_hook" "startup hook command"
     assert_equals "echo shutdown" "$shutdown_hook" "shutdown hook command"
@@ -388,7 +388,7 @@ test_portals_log_effective_runtime_values() {
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
     export CURRENT_LOG_FILE="$tmpdir/startup.log"
-    export STACKCOMP_SESSION_MODE=native
+    export MORPH_SESSION_MODE=native
     export XDG_CURRENT_DESKTOP="GNOME"
     : > "$CURRENT_LOG_FILE"
 
@@ -407,7 +407,7 @@ test_portals_log_effective_runtime_values() {
         :
     }
 
-    stackcomp_start_portals
+    morph_start_portals
 
     assert_file_contains \
         "$CURRENT_LOG_FILE" \
@@ -422,15 +422,15 @@ test_system_shutdown_cleans_registered_processes() {
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
     export COMP_ROOT_DIR="$repo_root"
-    export STACKCOMP_HELPER_LIB="$repo_root/scripts/shell-helpers.sh"
-    export STACKCOMP_SHUTDOWN_LOG_FILE="$tmpdir/shutdown.log"
-    export STACKCOMP_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
-    export STACKCOMP_SESSION_MODE=native
+    export MORPH_HELPER_LIB="$repo_root/scripts/shell-helpers.sh"
+    export MORPH_SHUTDOWN_LOG_FILE="$tmpdir/shutdown.log"
+    export MORPH_SHUTDOWN_LIST="$tmpdir/shutdown_list.nfo"
+    export MORPH_SESSION_MODE=native
     export XDG_CONFIG_HOME="$tmpdir/xdg-config"
     export SHUTDOWN_ORDER_FILE="$tmpdir/shutdown-order.log"
-    export STACKCOMP_USER_SHUTDOWN_HOOK_CMD='printf "user hook\n" >> "$SHUTDOWN_ORDER_FILE"'
-    : > "$STACKCOMP_SHUTDOWN_LOG_FILE"
-    printf '%s\n' dummy-service > "$STACKCOMP_SHUTDOWN_LIST"
+    export MORPH_USER_SHUTDOWN_HOOK_CMD='printf "user hook\n" >> "$SHUTDOWN_ORDER_FILE"'
+    : > "$MORPH_SHUTDOWN_LOG_FILE"
+    printf '%s\n' dummy-service > "$MORPH_SHUTDOWN_LIST"
     export PKILL_LOG_FILE="$tmpdir/pkill.log"
     : > "$PKILL_LOG_FILE"
 
@@ -457,9 +457,9 @@ test_system_shutdown_cleans_registered_processes() {
 
     first_line=$(sed -n '1p' "$SHUTDOWN_ORDER_FILE")
     assert_equals "user hook" "$first_line" "shutdown hook ordering"
-    assert_file_contains "$STACKCOMP_SHUTDOWN_LOG_FILE" "Sent SIGTERM to registered process: dummy-service."
-    assert_file_contains "$STACKCOMP_SHUTDOWN_LOG_FILE" "Stopping xdg-desktop-portal processes."
-    assert_file_contains "$STACKCOMP_SHUTDOWN_LOG_FILE" "Running user shutdown hook from config."
+    assert_file_contains "$MORPH_SHUTDOWN_LOG_FILE" "Sent SIGTERM to registered process: dummy-service."
+    assert_file_contains "$MORPH_SHUTDOWN_LOG_FILE" "Stopping xdg-desktop-portal processes."
+    assert_file_contains "$MORPH_SHUTDOWN_LOG_FILE" "Running user shutdown hook from config."
     assert_file_contains "$PKILL_LOG_FILE" "-x dummy-service"
     assert_file_contains "$PKILL_LOG_FILE" "-x xdg-desktop-portal-wlr|xdg-desktop-portal-gtk|xdg-desktop-portal-hyprland|xdg-desktop-portal-gnome|xdg-desktop-portal-kde|xdg-desktop-portal-lxqt|xdg-desktop-portal"
 
@@ -471,15 +471,15 @@ test_launcher_resolves_user_config_before_system_fallback() {
     tmpdir=$(make_tmpdir)
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
-    mkdir -p "$tmpdir/user-config/stackcomp" "$tmpdir/system-config" "$tmpdir/state"
-    cat > "$tmpdir/user-config/stackcomp/stackcomp.conf" <<'EOF'
+    mkdir -p "$tmpdir/user-config/morph" "$tmpdir/system-config" "$tmpdir/state"
+    cat > "$tmpdir/user-config/morph/morph.conf" <<'EOF'
 [bind]
 mods = Super
 key = Return
 action = exec
 command = foot
 EOF
-    cat > "$tmpdir/system-config/stackcomp.conf" <<'EOF'
+    cat > "$tmpdir/system-config/morph.conf" <<'EOF'
 [bind]
 mods = Super
 key = Q
@@ -489,13 +489,13 @@ EOF
     env -u DISPLAY -u WAYLAND_DISPLAY \
         XDG_CONFIG_HOME="$tmpdir/user-config" \
         XDG_STATE_HOME="$tmpdir/state" \
-        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/system-config/stackcomp.conf" \
-        STACKCOMP_RESOLVE_ONLY=1 \
-        "$repo_root/testing/stackcomp_run"
+        MORPH_SYSTEM_CONFIG_FILE="$tmpdir/system-config/morph.conf" \
+        MORPH_RESOLVE_ONLY=1 \
+        "$repo_root/testing/morph_run"
 
     assert_file_contains \
-        "$tmpdir/state/stackcomp/stackcomp-startup.log" \
-        "Config file path:             $tmpdir/user-config/stackcomp/stackcomp.conf (user config fallback)"
+        "$tmpdir/state/morph/morph-startup.log" \
+        "Config file path:             $tmpdir/user-config/morph/morph.conf (user config fallback)"
 
     rm -rf "$tmpdir"
     trap - EXIT HUP INT TERM
@@ -506,7 +506,7 @@ test_launcher_uses_system_config_when_user_config_is_missing() {
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
     mkdir -p "$tmpdir/system-config" "$tmpdir/state" "$tmpdir/empty-config"
-    cat > "$tmpdir/system-config/stackcomp.conf" <<'EOF'
+    cat > "$tmpdir/system-config/morph.conf" <<'EOF'
 [bind]
 mods = Super
 key = Q
@@ -516,13 +516,13 @@ EOF
     env -u DISPLAY -u WAYLAND_DISPLAY \
         XDG_CONFIG_HOME="$tmpdir/empty-config" \
         XDG_STATE_HOME="$tmpdir/state" \
-        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/system-config/stackcomp.conf" \
-        STACKCOMP_RESOLVE_ONLY=1 \
-        "$repo_root/testing/stackcomp_run"
+        MORPH_SYSTEM_CONFIG_FILE="$tmpdir/system-config/morph.conf" \
+        MORPH_RESOLVE_ONLY=1 \
+        "$repo_root/testing/morph_run"
 
     assert_file_contains \
-        "$tmpdir/state/stackcomp/stackcomp-startup.log" \
-        "Config file path:             $tmpdir/system-config/stackcomp.conf (system config fallback)"
+        "$tmpdir/state/morph/morph-startup.log" \
+        "Config file path:             $tmpdir/system-config/morph.conf (system config fallback)"
 
     rm -rf "$tmpdir"
     trap - EXIT HUP INT TERM
@@ -537,14 +537,14 @@ test_launcher_fails_when_no_config_exists() {
     env -u DISPLAY -u WAYLAND_DISPLAY \
         XDG_CONFIG_HOME="$tmpdir/empty-config" \
         XDG_STATE_HOME="$tmpdir/state" \
-        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/missing-system-config" \
-        STACKCOMP_RESOLVE_ONLY=1 \
-        "$repo_root/testing/stackcomp_run" >/dev/null 2>"$tmpdir/stderr.log"
+        MORPH_SYSTEM_CONFIG_FILE="$tmpdir/missing-system-config" \
+        MORPH_RESOLVE_ONLY=1 \
+        "$repo_root/testing/morph_run" >/dev/null 2>"$tmpdir/stderr.log"
     status=$?
     set -e
 
     assert_command_fails "$status" "launcher missing config path"
-    assert_file_contains "$tmpdir/stderr.log" "No readable stackcomp config found in user or system locations."
+    assert_file_contains "$tmpdir/stderr.log" "No readable morph config found in user or system locations."
 
     rm -rf "$tmpdir"
     trap - EXIT HUP INT TERM
@@ -558,13 +558,13 @@ test_launcher_can_opt_into_builtin_fallback() {
     env -u DISPLAY -u WAYLAND_DISPLAY \
         XDG_CONFIG_HOME="$tmpdir/empty-config" \
         XDG_STATE_HOME="$tmpdir/state" \
-        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/missing-system-config" \
-        STACKCOMP_ALLOW_BUILTIN_FALLBACK=1 \
-        STACKCOMP_RESOLVE_ONLY=1 \
-        "$repo_root/testing/stackcomp_run"
+        MORPH_SYSTEM_CONFIG_FILE="$tmpdir/missing-system-config" \
+        MORPH_ALLOW_BUILTIN_FALLBACK=1 \
+        MORPH_RESOLVE_ONLY=1 \
+        "$repo_root/testing/morph_run"
 
     assert_file_contains \
-        "$tmpdir/state/stackcomp/stackcomp-startup.log" \
+        "$tmpdir/state/morph/morph-startup.log" \
         "Builtin fallback enabled:     1"
 
     rm -rf "$tmpdir"
@@ -575,8 +575,8 @@ test_launcher_restores_caller_environment_over_file_layers() {
     tmpdir=$(make_tmpdir)
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
-    mkdir -p "$tmpdir/user-config/stackcomp" "$tmpdir/system-config" "$tmpdir/state"
-    cat > "$tmpdir/user-config/stackcomp/stackcomp.conf" <<'EOF'
+    mkdir -p "$tmpdir/user-config/morph" "$tmpdir/system-config" "$tmpdir/state"
+    cat > "$tmpdir/user-config/morph/morph.conf" <<'EOF'
 [bind]
 mods = Super
 key = Return
@@ -584,23 +584,23 @@ action = exec
 command = foot
 EOF
     cat > "$tmpdir/system-config/environment" <<'EOF'
-STACKCOMP_DBG=0
+MORPH_DBG=0
 EOF
-    cat > "$tmpdir/user-config/stackcomp/environment" <<'EOF'
-STACKCOMP_DBG=1
+    cat > "$tmpdir/user-config/morph/environment" <<'EOF'
+MORPH_DBG=1
 EOF
 
     env -u DISPLAY -u WAYLAND_DISPLAY \
         XDG_CONFIG_HOME="$tmpdir/user-config" \
         XDG_STATE_HOME="$tmpdir/state" \
-        STACKCOMP_SYSTEM_CONFIG_DIR="$tmpdir/system-config" \
-        STACKCOMP_RESOLVE_ONLY=1 \
-        STACKCOMP_DBG=2 \
-        "$repo_root/testing/stackcomp_run"
+        MORPH_SYSTEM_CONFIG_DIR="$tmpdir/system-config" \
+        MORPH_RESOLVE_ONLY=1 \
+        MORPH_DBG=2 \
+        "$repo_root/testing/morph_run"
 
     assert_file_contains \
-        "$tmpdir/state/stackcomp/stackcomp-startup.log" \
-        "STACKCOMP_DBG:                2"
+        "$tmpdir/state/morph/morph-startup.log" \
+        "MORPH_DBG:                2"
 
     rm -rf "$tmpdir"
     trap - EXIT HUP INT TERM
@@ -611,7 +611,7 @@ test_production_wrapper_resolves_system_config_with_repo_overrides() {
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
 
     mkdir -p "$tmpdir/system-config" "$tmpdir/state" "$tmpdir/empty-config"
-    cat > "$tmpdir/system-config/stackcomp.conf" <<'EOF'
+    cat > "$tmpdir/system-config/morph.conf" <<'EOF'
 [bind]
 mods = Super
 key = Q
@@ -621,19 +621,19 @@ EOF
     env -u DISPLAY -u WAYLAND_DISPLAY \
         XDG_CONFIG_HOME="$tmpdir/empty-config" \
         XDG_STATE_HOME="$tmpdir/state" \
-        STACKCOMP_SYSTEM_HOOK_DIR="$repo_root/scripts" \
-        STACKCOMP_SYSTEM_CONFIG_DIR="$repo_root/config" \
-        STACKCOMP_SYSTEM_CONFIG_FILE="$tmpdir/system-config/stackcomp.conf" \
-        STACKCOMP_BIN=/bin/true \
-        STACKCOMP_RESOLVE_ONLY=1 \
-        sh "$repo_root/scripts/stackcomp-session"
+        MORPH_SYSTEM_HOOK_DIR="$repo_root/scripts" \
+        MORPH_SYSTEM_CONFIG_DIR="$repo_root/config" \
+        MORPH_SYSTEM_CONFIG_FILE="$tmpdir/system-config/morph.conf" \
+        MORPH_BIN=/bin/true \
+        MORPH_RESOLVE_ONLY=1 \
+        sh "$repo_root/scripts/morph-session"
 
     assert_file_contains \
-        "$tmpdir/state/stackcomp/stackcomp-startup.log" \
+        "$tmpdir/state/morph/morph-startup.log" \
         "Managed hook directory:       $repo_root/scripts"
     assert_file_contains \
-        "$tmpdir/state/stackcomp/stackcomp-startup.log" \
-        "Config file path:             $tmpdir/system-config/stackcomp.conf (system config fallback)"
+        "$tmpdir/state/morph/morph-startup.log" \
+        "Config file path:             $tmpdir/system-config/morph.conf (system config fallback)"
 
     rm -rf "$tmpdir"
     trap - EXIT HUP INT TERM
@@ -646,11 +646,11 @@ test_meson_install_manifest_lists_runtime_artifacts() {
     manifest="$tmpdir/installed.json"
     meson introspect --installed "$repo_root/build" > "$manifest"
 
-    assert_file_contains "$manifest" "/usr/local/bin/stackcomp-session"
-    assert_file_contains "$manifest" "/usr/local/etc/stackcomp/stackcomp.conf"
-    assert_file_contains "$manifest" "/usr/local/etc/stackcomp/system_startup.sh"
-    assert_file_contains "$manifest" "/usr/local/share/wayland-sessions/stackcomp.desktop"
-    assert_file_contains "$manifest" "/usr/local/share/doc/stackcomp/CONFIG.md"
+    assert_file_contains "$manifest" "/usr/local/bin/morph-session"
+    assert_file_contains "$manifest" "/usr/local/etc/morph/morph.conf"
+    assert_file_contains "$manifest" "/usr/local/etc/morph/system_startup.sh"
+    assert_file_contains "$manifest" "/usr/local/share/wayland-sessions/morph.desktop"
+    assert_file_contains "$manifest" "/usr/local/share/doc/morph/CONFIG.md"
 
     rm -rf "$tmpdir"
     trap - EXIT HUP INT TERM
@@ -664,8 +664,8 @@ test_system_uninstall_prints_manifest_without_removing() {
     sh "$repo_root/scripts/system-uninstall.sh" --builddir "$repo_root/build" --print-only > "$output_file"
 
     assert_file_contains "$output_file" "Installed artifacts for build dir: $repo_root/build"
-    assert_file_contains "$output_file" "/usr/local/bin/stackcomp-session"
-    assert_file_contains "$output_file" "/usr/local/etc/stackcomp/stackcomp.conf"
+    assert_file_contains "$output_file" "/usr/local/bin/morph-session"
+    assert_file_contains "$output_file" "/usr/local/etc/morph/morph.conf"
     assert_file_contains "$output_file" "Print-only mode active. No files were removed."
 
     rm -rf "$tmpdir"
@@ -680,7 +680,7 @@ test_system_startup_nested_sets_wayland_display
 test_system_reload_runs_user_hook_file_with_helpers
 test_system_startup_native_runs_managed_portals
 test_system_startup_runs_user_hook_command
-test_stackcomp_config_hook_from_file_reads_hooks_section
+test_morph_config_hook_from_file_reads_hooks_section
 test_portals_log_effective_runtime_values
 test_system_shutdown_cleans_registered_processes
 test_launcher_resolves_user_config_before_system_fallback
