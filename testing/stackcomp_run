@@ -39,6 +39,8 @@ STACKCOMP_X11_DISPLAY_DEFAULT=
 STACKCOMP_DBG_DEFAULT=0
 STACKCOMP_CFG_DEFAULT=
 STACKCOMP_LOG_DIR_DEFAULT=
+STACKCOMP_SYSTEM_HOOK_DIR_DEFAULT="$COMP_ROOT_DIR/scripts"
+STACKCOMP_SYSTEM_CONFIG_DIR_DEFAULT="$COMP_ROOT_DIR/config"
 
 # Apply defaults only when unset by caller or environment file.
 if [ -z "${WAYLAND_DEBUG+x}" ]; then WAYLAND_DEBUG="$WAYLAND_DEBUG_DEFAULT"; fi
@@ -50,6 +52,8 @@ if [ -z "${STACKCOMP_X11_DISPLAY+x}" ]; then STACKCOMP_X11_DISPLAY="$STACKCOMP_X
 if [ -z "${STACKCOMP_DBG+x}" ]; then STACKCOMP_DBG="$STACKCOMP_DBG_DEFAULT"; fi
 if [ -z "${STACKCOMP_CFG+x}" ]; then STACKCOMP_CFG="$STACKCOMP_CFG_DEFAULT"; fi
 if [ -z "${STACKCOMP_LOG_DIR+x}" ]; then STACKCOMP_LOG_DIR="$STACKCOMP_LOG_DIR_DEFAULT"; fi
+if [ -z "${STACKCOMP_SYSTEM_HOOK_DIR+x}" ]; then STACKCOMP_SYSTEM_HOOK_DIR="$STACKCOMP_SYSTEM_HOOK_DIR_DEFAULT"; fi
+if [ -z "${STACKCOMP_SYSTEM_CONFIG_DIR+x}" ]; then STACKCOMP_SYSTEM_CONFIG_DIR="$STACKCOMP_SYSTEM_CONFIG_DIR_DEFAULT"; fi
 
 STACKCOMP_DBG_NOTE=""
 case "$STACKCOMP_DBG" in
@@ -64,6 +68,11 @@ export WAYLAND_DEBUG
 export WLR_LOGTS
 export _JAVA_AWT_WM_NONREPARENTING
 export WMNAME
+# Tell the compositor to keep the lifecycle frame around the configured hooks
+# instead of executing those user snippets as the first entrypoint directly.
+export STACKCOMP_MANAGED_HOOKS=1
+export STACKCOMP_SYSTEM_HOOK_DIR
+export STACKCOMP_SYSTEM_CONFIG_DIR
 
 # Forward optional XKB overrides from environment file/caller into stackcomp.
 # Keep unset values untouched so libxkbcommon can use system defaults.
@@ -97,6 +106,18 @@ else
     CONFIG_FILE="$CONFIG_DEFAULT"
     CONFIG_NOTE="default"
 fi
+
+# Export the user-facing hook commands from the active config so the managed
+# shutdown fallback can still honor them if the compositor dies before its own
+# shutdown hook path is reached.
+STACKCOMP_USER_STARTUP_HOOK_CMD="$(stackcomp_config_hook_from_file startup "$CONFIG_FILE")"
+STACKCOMP_USER_SHUTDOWN_HOOK_CMD="$(stackcomp_config_hook_from_file shutdown "$CONFIG_FILE")"
+STACKCOMP_USER_RELOAD_HOOK_CMD="$(stackcomp_config_hook_from_file reload "$CONFIG_FILE")"
+# Exporting empty values is intentional here: the managed scripts then fall
+# back to the XDG hook locations instead of guessing from repository paths.
+export STACKCOMP_USER_STARTUP_HOOK_CMD
+export STACKCOMP_USER_SHUTDOWN_HOOK_CMD
+export STACKCOMP_USER_RELOAD_HOOK_CMD
 
 STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 STATE_DIR="$STATE_HOME/stackcomp"
@@ -222,7 +243,7 @@ CORE_LOG_BASELINE=$(line_count_or_zero "$LOG_FILE")
 CRASH_LOG_BASELINE=$(line_count_or_zero "$CRASH_LOG_FILE")
 
 
-# Dynamic program list shared by startup.sh and shutdown.sh for shutdown cleanup.
+# Dynamic program list shared by startup.sh and system_shutdown.sh for shutdown cleanup.
 # ==============================================================================
 export STACKCOMP_SHUTDOWN_LIST="$STATE_DIR/shutdown_list.nfo"
 # Recreate the shutdown tracker on every run so stale entries never survive
@@ -240,6 +261,9 @@ log_startup INFO "Environment source:           $ENV_FILE_NOTE"
 log_startup INFO "Selected session mode:        $SESSION_MODE_NOTE"
 log_startup INFO "X11 probe details:            $X11_PROBE_NOTE"
 log_startup INFO "Config file path:             $CONFIG_FILE ($CONFIG_NOTE)"
+log_startup INFO "Managed hooks enabled:        $STACKCOMP_MANAGED_HOOKS"
+log_startup INFO "Managed hook directory:       $STACKCOMP_SYSTEM_HOOK_DIR"
+log_startup INFO "Managed config directory:     $STACKCOMP_SYSTEM_CONFIG_DIR"
 log_startup INFO "WLR_BACKENDS:                 $WLR_BACKENDS..."
 log_startup INFO "WLR_WL_SOCKET:                $WLR_WL_SOCKET"
 log_startup INFO "STACKCOMP_DBG:                $STACKCOMP_DBG"
@@ -311,16 +335,21 @@ else
 fi
 
 
-# Only trigger the managed shutdown script on abnormal exit. A clean exit keeps
-# compositor-owned shutdown hooks in charge of the final teardown.
+# Only trigger managed shutdown handling on abnormal exit. A clean exit lets
+# the compositor's managed hook dispatch run the normal shutdown sequence.
 # ==============================================================================
 if [ "$EXIT_CODE" -ne 0 ]; then
-    log_startup INFO "Compositor exited with rc=$EXIT_CODE; triggering session shutdown script..."
-    if [ -f "$COMP_ROOT_DIR/config/shutdown.sh" ]; then
-        "$COMP_ROOT_DIR/config/shutdown.sh"
+    system_shutdown_hook="$STACKCOMP_SYSTEM_HOOK_DIR/system_shutdown.sh"
+
+    # Normal exits already ran through the compositor-managed shutdown hook.
+    # This path exists only for crashes and other early aborts.
+    log_startup INFO "Compositor exited with rc=$EXIT_CODE; triggering managed shutdown runtime: $system_shutdown_hook"
+
+    if [ -f "$system_shutdown_hook" ]; then
+        "$system_shutdown_hook"
     else
-        log_startup WARN "shutdown.sh not found at the expected path."
+        log_startup ERROR "Managed shutdown runtime not found at the expected path: $system_shutdown_hook"
     fi
 else
-    log_startup INFO "Compositor exited cleanly; relying on config shutdown hooks."
+    log_startup INFO "Compositor exited cleanly; relying on compositor-managed shutdown hooks."
 fi

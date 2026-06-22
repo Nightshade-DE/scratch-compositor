@@ -3,11 +3,8 @@
 # Keep this file focused on user-facing startup content:
 # - Additional autostart services
 # - Session components
-# Managed startup preparation lives in scripts/prepare_startup.sh.
+# The managed runtime provides launch/log helpers before this hook runs.
 ################################################################################
-
-# Load the managed startup preparation before any user-facing session entries.
-. "$COMP_ROOT_DIR/scripts/prepare_startup.sh"
 
 # Additional autostart services
 # ==============================================================================

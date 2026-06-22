@@ -88,9 +88,16 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 #### Current Branch State after the First Runtime Refactors
 
 - [x] `config/startup.sh` is now reduced to a slim user hook:
-  - [x] managed startup preparation lives in `scripts/prepare_startup.sh`
-  - [x] `config/startup.sh` only contains user-facing session entries and sources the preparation layer
+  - [x] managed startup preparation lives in `scripts/system_startup.sh`
+  - [x] `config/startup.sh` only contains user-facing session entries and relies on the managed hook frame
   - [x] nested/native detection and portal startup are no longer inside the actual user hook body
+- [x] shutdown responsibilities are now split explicitly:
+  - [x] `config/shutdown.sh` is the optional user shutdown hook
+  - [x] `scripts/system_shutdown.sh` is the managed cleanup runtime that must still run after the user hook
+- [x] The current dev flow now uses managed hook dispatch instead of direct user-hook execution:
+  - [x] `testing/stackcomp_run` exports `STACKCOMP_MANAGED_HOOKS=1`
+  - [x] the binary then dispatches `scripts/system_startup.sh` and `scripts/system_shutdown.sh`
+  - [x] configured user hooks remain in the config and are only run from the managed runtime in the intended order
 - [x] Portal handling is now encapsulated as its own managed runtime building block:
   - [x] `config/portals` contains the base flow for native sessions
   - [x] an optional override under `~/.config/stackcomp/portals` is loaded after the base file
@@ -198,10 +205,10 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 - [x] Keep shared logging helpers, the central shutdown tracker, and simple launch helpers instead of raw background processes.
 - [x] Remove direct nested/native branching, embedded portal handling, and the implicit mix of runtime core and user content from `config/startup.sh`.
-- [x] Runtime preparation now lives before user content in a separate file: `scripts/prepare_startup.sh`.
+- [x] Runtime preparation now lives before user content in a separate file: `scripts/system_startup.sh`, which then starts the user hook.
 - [x] The current dev flow now has three separated layers:
   - [x] `testing/stackcomp_run` as launcher and runtime frame
-  - [x] `scripts/prepare_startup.sh` as managed startup preparation
+  - [x] `scripts/system_startup.sh` as managed startup preparation
   - [x] `config/startup.sh` as the slim user hook for session components
 
 ### 4. Extract Portal Handling
@@ -214,11 +221,11 @@ This roadmap applies to branch `feature/install-and-user-setup`, which starts fr
 
 ### 5. Make the Shutdown Flow Robust
 
-- [ ] Separate the managed shutdown core from the optional user shutdown hook.
+- [x] Separate the managed shutdown core from the optional user shutdown hook.
 - [x] Define how `shutdown_list.nfo` remains authoritative.
-- [ ] Wire an optional user shutdown hook so the core flow cannot be lost.
-- [ ] Provide clear error paths for incompatible hook usage.
-- [ ] Define a fallback if only `stackcomp` itself can be shut down or restarted safely.
+- [x] Wire an optional user shutdown hook so the core flow cannot be lost.
+- [x] Provide clear error paths for incompatible hook usage.
+- [x] Define a fallback if only `stackcomp` itself can be shut down or restarted safely.
 
 ### 6. Introduce the Reload Flow
 

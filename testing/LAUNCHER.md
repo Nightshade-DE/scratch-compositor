@@ -34,13 +34,15 @@ Portal startup is managed separately from user autostarts.
 
 Resolution order in the current dev flow:
 
-1. `config/startup.sh` sources `scripts/prepare_startup.sh`
-2. Managed base file: `config/portals`
-3. Optional user override: `~/.config/stackcomp/portals`
+1. `testing/stackcomp_run` exports `STACKCOMP_MANAGED_HOOKS=1`
+2. The compositor dispatches `scripts/system_startup.sh`
+3. Managed base file: `config/portals`
+4. Optional user override: `~/.config/stackcomp/portals`
 
 Behavior:
 
-- `scripts/prepare_startup.sh` loads startup helpers and prepares nested/native runtime state before the user hook body runs.
+- The config keeps the user hook paths. The managed runtime reads those commands from the active config and passes them through environment variables.
+- `scripts/system_startup.sh` loads startup helpers, prepares nested/native runtime state, and then runs the configured user startup hook or its XDG fallback.
 - Native sessions load the managed base file before any session components are started.
 - If the user override exists, it is sourced after the base file and may replace `stackcomp_start_portals()`.
 - Nested sessions skip portal startup entirely.
@@ -62,8 +64,10 @@ Short lifecycle:
 
 1. At launcher start, the file is recreated/cleared.
 2. Each service started via launch in config/startup.sh is appended to this file.
-3. On shutdown, config/shutdown.sh reads this list and terminates the registered services (TERM, then KILL if needed).
-4. Manual edits can desync this list and lead to unclean shutdown (leftover or wrongly terminated processes).
+3. On abnormal compositor exit, the launcher runs `scripts/system_shutdown.sh` directly.
+4. `scripts/system_shutdown.sh` first runs the configured user shutdown hook or its XDG fallback.
+5. `scripts/system_shutdown.sh` then reads this list and terminates the registered services (TERM, then KILL if needed).
+6. Manual edits can desync this list and lead to unclean shutdown (leftover or wrongly terminated processes).
 
 ## Typical Runs
 

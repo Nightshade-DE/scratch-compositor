@@ -444,8 +444,86 @@ static void spawn_sh_c_wait(const char *cmd) {
 	}
 }
 
+/** Return true for the managed runtime flag values accepted by the shell side too. */
+static bool env_flag_enabled(const char *value) {
+	if (!value || !value[0]) {
+		return false;
+	}
+	return !strcasecmp(value, "1") || !strcasecmp(value, "true") || !strcasecmp(value, "yes") ||
+		   !strcasecmp(value, "on");
+}
+
+/** Return the directory that contains managed lifecycle hooks. */
+static const char *managed_hook_dir(void) {
+	const char *dir = getenv("STACKCOMP_SYSTEM_HOOK_DIR");
+	if (dir && dir[0]) {
+		return dir;
+	}
+	return "/etc/stackcomp";
+}
+
+/** Export the user hook commands so managed scripts can invoke them in-order. */
+static void export_managed_hook_env(const struct comp_config *cfg) {
+	if (!cfg) {
+		return;
+	}
+	/* Managed mode keeps config parsing inside the compositor, but the shell
+	 * runtime still needs the resolved hook snippets for the user phase. */
+	if (cfg->hook_startup && cfg->hook_startup[0]) {
+		setenv("STACKCOMP_USER_STARTUP_HOOK_CMD", cfg->hook_startup, 1);
+	} else {
+		unsetenv("STACKCOMP_USER_STARTUP_HOOK_CMD");
+	}
+	if (cfg->hook_shutdown && cfg->hook_shutdown[0]) {
+		setenv("STACKCOMP_USER_SHUTDOWN_HOOK_CMD", cfg->hook_shutdown, 1);
+	} else {
+		unsetenv("STACKCOMP_USER_SHUTDOWN_HOOK_CMD");
+	}
+	if (cfg->hook_reload && cfg->hook_reload[0]) {
+		setenv("STACKCOMP_USER_RELOAD_HOOK_CMD", cfg->hook_reload, 1);
+	} else {
+		unsetenv("STACKCOMP_USER_RELOAD_HOOK_CMD");
+	}
+}
+
+/** Spawn one managed hook file through /bin/sh so execution does not depend on chmod bits. */
+static void spawn_managed_hook(const char *hook_name, bool wait_for_exit) {
+	char hook_path[PATH_MAX];
+	const char *dir = managed_hook_dir();
+	if (snprintf(hook_path, sizeof(hook_path), "%s/%s", dir, hook_name) >= (int)sizeof(hook_path)) {
+		wlr_log(WLR_ERROR, "Managed hook path is too long: %s/%s", dir, hook_name);
+		return;
+	}
+
+	char cmd[PATH_MAX + 32];
+	/* Execute through sh explicitly so packaged hooks and repo-local test hooks
+	 * behave the same even when only the file contents matter. */
+	if (snprintf(cmd, sizeof(cmd), "exec sh \"%s\"", hook_path) >= (int)sizeof(cmd)) {
+		wlr_log(WLR_ERROR, "Managed hook command is too long for %s", hook_path);
+		return;
+	}
+
+	if (wait_for_exit) {
+		spawn_sh_c_wait(cmd);
+	} else {
+		spawn_sh_c(cmd);
+	}
+}
+
+/** Managed launcher/runtime mode keeps the lifecycle frame outside user hooks. */
+static bool managed_hooks_enabled(void) {
+	return env_flag_enabled(getenv("STACKCOMP_MANAGED_HOOKS"));
+}
+
 void comp_config_run_startup(const struct comp_config *cfg) {
 	if (!cfg) {
+		return;
+	}
+	if (managed_hooks_enabled()) {
+		/* Managed startup wraps the configured user hook so runtime preparation
+		 * happens before user autostarts in every launcher-controlled session. */
+		export_managed_hook_env(cfg);
+		spawn_managed_hook("system_startup.sh", false);
 		return;
 	}
 	spawn_sh_c(cfg->hook_startup);
@@ -460,6 +538,13 @@ void comp_config_run_reload(const struct comp_config *cfg) {
 
 void comp_config_run_shutdown(const struct comp_config *cfg) {
 	if (!cfg) {
+		return;
+	}
+	if (managed_hooks_enabled()) {
+		/* Shutdown stays synchronous so the compositor waits for user teardown
+		 * and managed cleanup before returning control to the launcher. */
+		export_managed_hook_env(cfg);
+		spawn_managed_hook("system_shutdown.sh", true);
 		return;
 	}
 	spawn_sh_c_wait(cfg->hook_shutdown);

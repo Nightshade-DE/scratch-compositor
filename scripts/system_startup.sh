@@ -1,12 +1,11 @@
 #!/bin/sh
-# Managed startup preparation for stackcomp startup hooks.
+# Managed startup runtime for stackcomp startup hooks.
 # - Activates shared startup helpers and logging.
 # - Prepares nested client environment before user services run.
 # - Starts managed portal runtime for native sessions.
 ################################################################################
 
 # Activate helper functions for startup logging and managed launch helpers.
-# shellcheck disable=SC2034
 CURRENT_LOG_FILE="${STACKCOMP_STARTUP_LOG_FILE:?STACKCOMP_STARTUP_LOG_FILE is not set}"
 . "$COMP_ROOT_DIR/scripts/shell-helpers.sh"
 
@@ -15,6 +14,8 @@ if stackcomp_session_is_nested; then
     if [ -n "${WLR_WL_SOCKET:-}" ]; then
         export WAYLAND_DISPLAY="$WLR_WL_SOCKET"
     elif [ -z "${WAYLAND_DISPLAY:-}" ]; then
+        # Keep a deterministic fallback name for tests and for launchers that
+        # already decided on nested mode before setting a socket explicitly.
         export WAYLAND_DISPLAY="wayland-nested"
     fi
 
@@ -25,8 +26,14 @@ else
     # Treat portal loading failures as a managed runtime error, but keep the
     # user startup hook alive so session components can still start.
     if stackcomp_source_portals; then
+        # Portals must come up before user autostarts so toolkit clients see
+        # the intended desktop integration from their first connection onward.
         stackcomp_start_portals
     else
         log_startup ERROR "Portal startup skipped because portal configuration failed to load."
     fi
 fi
+
+# The managed runtime prepares the session first, then hands control to the
+# configured user startup hook or its conventional XDG fallback.
+stackcomp_run_optional_user_hook startup "${STACKCOMP_USER_STARTUP_HOOK_CMD:-}"

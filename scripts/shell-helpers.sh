@@ -32,6 +32,18 @@ log_shutdown() {
     log_message "$@"
 }
 
+# Return shell truth for common environment flag values.
+stackcomp_env_flag_is_enabled() {
+    case "${1:-}" in
+        1|true|TRUE|yes|YES|on|ON)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 
 # Process launch helpers
 # ==============================================================================
@@ -105,16 +117,120 @@ launch_nokill() {
 # Portal startup helpers
 # ==============================================================================
 
-# Return the dev-flow user config directory that can override managed runtime files.
+# Return the fixed managed config directory for portals and other runtime assets.
+# The dev launcher may override this so the same runtime code can be exercised
+# from the repository without pretending that repo files already live in /etc.
+stackcomp_managed_config_dir() {
+    printf '%s\n' "${STACKCOMP_SYSTEM_CONFIG_DIR:-/etc/stackcomp}"
+}
+
+# Return the user config directory that can override managed runtime files.
 stackcomp_user_config_dir() {
     printf '%s\n' "${XDG_CONFIG_HOME:-$HOME/.config}/stackcomp"
+}
+
+# Return the last configured hook command from a config file's [hooks] section.
+stackcomp_config_hook_from_file() {
+    hook_kind="$1"
+    config_file="$2"
+
+    if [ ! -r "$config_file" ]; then
+        return 1
+    fi
+
+    # Parse only the final value from [hooks] so repeated compatibility keys
+    # behave like the compositor config loader instead of accumulating values.
+    awk -v hook_kind="$hook_kind" '
+        function trim(s) {
+            sub(/^[ \t\r\n]+/, "", s)
+            sub(/[ \t\r\n]+$/, "", s)
+            return s
+        }
+
+        BEGIN {
+            in_hooks = 0
+            value = ""
+        }
+
+        {
+            line = $0
+            sub(/\r$/, "", line)
+            if (line ~ /^[ \t]*#/ || line ~ /^[ \t]*$/) {
+                next
+            }
+            if (line ~ /^[ \t]*\[/) {
+                lower = tolower(trim(line))
+                in_hooks = (lower == "[hooks]")
+                next
+            }
+            if (!in_hooks) {
+                next
+            }
+
+            eq = index(line, "=")
+            if (!eq) {
+                next
+            }
+
+            key = tolower(trim(substr(line, 1, eq - 1)))
+            raw = trim(substr(line, eq + 1))
+
+            if (hook_kind == "startup" && (key == "startup" || key == "on_startup")) {
+                value = raw
+            } else if (hook_kind == "shutdown" && (key == "shutdown" || key == "on_shutdown")) {
+                value = raw
+            } else if (hook_kind == "reload" && (key == "reload" || key == "on_reload")) {
+                value = raw
+            }
+        }
+
+        END {
+            if (value != "") {
+                print value
+            }
+        }
+    ' "$config_file"
+}
+
+# Run a user hook command from the active config, or fall back to the standard
+# XDG user hook path when the managed runtime was enabled without an explicit
+# hook entry for that lifecycle phase.
+stackcomp_run_optional_user_hook() {
+    hook_kind="$1"
+    hook_cmd="$2"
+    hook_path="$(stackcomp_user_config_dir)/$hook_kind.sh"
+
+    if [ -n "$hook_cmd" ]; then
+        # Config-provided commands have highest priority because they are the
+        # explicit lifecycle contract selected by the active config file.
+        log_message INFO "Running user $hook_kind hook from config."
+        if ! sh -c "$hook_cmd"; then
+            log_message WARN "User $hook_kind hook from config exited with a non-zero status."
+            return 1
+        fi
+        return 0
+    fi
+
+    if [ -r "$hook_path" ]; then
+        # The XDG fallback keeps direct binary starts and minimal configs usable
+        # without forcing every config to spell out all hook paths explicitly.
+        log_message INFO "Running default user $hook_kind hook: $hook_path"
+        if ! sh "$hook_path"; then
+            log_message WARN "Default user $hook_kind hook exited with a non-zero status: $hook_path"
+            return 1
+        fi
+        return 0
+    fi
+
+    log_message INFO "No user $hook_kind hook configured or found."
+    return 0
 }
 
 # Source the managed portal definition and then an optional user override.
 # This keeps portal startup in the runtime layer while still allowing advanced
 # users to replace the implementation in one dedicated file.
 stackcomp_source_portals() {
-    base_portals_file="$COMP_ROOT_DIR/config/portals"
+    base_portals_file="$(stackcomp_managed_config_dir)/portals"
     user_portals_file="$(stackcomp_user_config_dir)/portals"
 
     if [ ! -r "$base_portals_file" ]; then
