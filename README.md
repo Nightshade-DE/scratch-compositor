@@ -5,9 +5,9 @@
 ## Current Features
 
 - Three layouts: stack, tile grid, and horizontal scroll
-- Nine workspaces with switch/move actions and IPC commands
+- 9 workspaces with switch/move actions and IPC commands
 - INI-style keybind configuration with optional shell `when` predicates
-- Tiling rules and decoration rules by regex
+- Tiling rules ([tile_rule]) and decoration rules ([decoration_rule]) by regex.
 - Layer-shell workarea handling via exclusive zones
 - Optional Xwayland support for X11 clients
 - Environment-driven launcher/runtime settings, including XKB keyboard defaults
