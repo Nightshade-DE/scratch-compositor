@@ -1,6 +1,0 @@
-[Desktop Entry]
-Name=morph
-TryExec=/usr/local/bin/morph-session
-Exec=/usr/local/bin/morph-session
-Type=Application
-DesktopNames=morph

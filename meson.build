@@ -99,6 +99,7 @@ config_test = executable(
   'morph-test-config',
   'tests/test_config.c',
   'src/config.c',
+  xdg_shell_server_h,
   dependencies: [wlroots, pixman, wayland_server, xkbcommon, m_dep],
   include_directories: include_directories('src'),
 )
@@ -141,19 +142,23 @@ install_data(
 )
 
 install_data(
-  files('data/morph.desktop'),
+  files('sessions/morph.desktop'),
   install_dir: get_option('datadir') / 'wayland-sessions',
 )
 
 install_data(
   files(
     'README.md',
-    'CONFIG.md',
-    'COMPOSITOR.md',
-    'CRASHING.md',
-    'TESTING.md',
-    'config/ENVIRONMENT.md',
-    'testing/LAUNCHER.md',
+    'docs/OVERVIEW.md',
+    'docs/CLI.md',
+    'docs/CONFIG.md',
+    'docs/COMPOSITOR.md',
+    'docs/CRASHING.md',
+    'docs/DEVFAQ.md',
+    'docs/PROTOCOLS.md',
+    'docs/TESTING.md',
+    'docs/ENVIRONMENT.md',
+    'docs/LAUNCHER.md',
     'testing/morph.conf',
     'testing/test-howto_start-variants.nfo',
   ),

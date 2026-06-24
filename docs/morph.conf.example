@@ -1,0 +1,298 @@
+# Copy this file to ~/.config/morph/morph.conf.
+# You can also point Morph at a different path with MORPH_CONFIG or morph -c /path/to/morph.conf.
+# The full syntax and behavior reference lives in docs/CONFIG.md.
+#
+# Runtime notes:
+# - X11 apps use xwayland-satellite when MORPH_X11 is enabled.
+# - _JAVA_AWT_WM_NONREPARENTING=1 is exported for the session to help Java launchers.
+# - IPC uses $XDG_RUNTIME_DIR/morph-ipc.sock by default. morph --no-ipc disables the socket.
+# - morph --layout, --scroll, --tile-move, --scroll-move, --tile-grid, --workspace,
+#   --workspace-move, and morph --reload-config can talk to a running instance over IPC.
+
+# ----------------------------------------------------------------------------
+# Lifecycle hooks
+# ----------------------------------------------------------------------------
+# A single [hooks] block may define shell snippets for startup, reload, and shutdown.
+# Each value runs under /bin/sh -c. Treat these commands as trusted code.
+# In the managed session flow, startup and reload pass through Morph's system hooks first.
+# Shutdown runs your user hook before the managed cleanup hook.
+#
+# [hooks]
+# startup = waybar &
+# shutdown = pkill -x waybar 2>/dev/null || true
+# reload = pkill -USR1 waybar 2>/dev/null || true
+
+# ----------------------------------------------------------------------------
+# Key bindings
+# ----------------------------------------------------------------------------
+# Each [bind] block describes one shortcut.
+# Start a new [bind] section for every binding.
+# Supported modifier tokens: Super, Shift, Ctrl/Control, Alt/Meta, Mod/Logo/Win/Mod4.
+# key= is resolved with xkb_keysym_from_name(), so names like Return, Escape, Q, Left, and F1 work.
+#
+# Optional when= runs /bin/sh -c on every key press.
+# Exit status 0 means the bind is active.
+# Runtime environment for when=:
+# - MORPH_LAYOUT is stack, tile, or scroll.
+# - MORPH_WORKSPACE is the active workspace number as 1..9.
+
+# Launch a terminal.
+[bind]
+mods = Super
+key = Return
+action = exec
+command = alacritty
+
+# Close the focused XDG toplevel.
+[bind]
+mods = Super+Shift
+key = Q
+action = close
+
+# Quit the compositor.
+[bind]
+mods = Super
+key = Escape
+action = quit
+
+# Switch directly to tile layout.
+# Note: layout_toggle switches between stack and tile, while scroll returns to stack.
+# [bind]
+# mods = Super
+# key = T
+# action = layout_tile
+
+# Toggle between stack and tile layouts.
+# [bind]
+# mods = Super
+# key = Space
+# action = layout_toggle
+
+# Switch directly to scroll layout.
+# [bind]
+# mods = Super
+# key = S
+# action = layout_scroll
+
+# Start an app launcher only when it exists.
+# [bind]
+# mods = Super
+# key = D
+# action = exec
+# command = fuzzel
+# when = command -v fuzzel >/dev/null 2>&1
+
+# Example of layout-aware bindings using when=.
+# [bind]
+# mods = Super+Shift
+# key = Right
+# action = scroll_right
+# when = [ "$MORPH_LAYOUT" = scroll ]
+#
+# [bind]
+# mods = Super+Shift
+# key = Right
+# action = tile_right
+# when = [ "$MORPH_LAYOUT" = tile ]
+
+# ----------------------------------------------------------------------------
+# Workspaces
+# ----------------------------------------------------------------------------
+# Morph currently provides 9 workspaces.
+# workspace / workspace_goto and workspace_move require command= with a value from 1 to 9.
+# workspace_next / ws_next and workspace_prev / ws_prev cycle with wraparound.
+
+# Go to workspace 1.
+# [bind]
+# mods = Super
+# key = 1
+# action = workspace
+# command = 1
+
+# Move the focused window to workspace 2.
+# [bind]
+# mods = Super+Shift
+# key = 2
+# action = workspace_move
+# command = 2
+
+# Cycle to the next workspace.
+# [bind]
+# mods = Super
+# key = Page_Down
+# action = workspace_next
+
+# Cycle to the previous workspace.
+# [bind]
+# mods = Super
+# key = Page_Up
+# action = workspace_prev
+
+# ----------------------------------------------------------------------------
+# Tile and scroll movement
+# ----------------------------------------------------------------------------
+# Sort-order movement works on the focused tiled window.
+# These actions are no-ops when the focused window is not a tiled XDG toplevel.
+# Useful actions and aliases:
+# - tile_swap_prev / tile_prev / tile_left / scroll_prev / scroll_left
+# - tile_swap_next / tile_next / tile_right / scroll_next / scroll_right
+# - tile_to_first / tile_first / tile_begin
+# - tile_to_last / tile_last / tile_end
+# - tile_move with an optional signed integer command (default 1)
+
+# Move one slot toward the start of the tile list.
+# [bind]
+# mods = Super+Shift
+# key = bracketleft
+# action = tile_left
+
+# Move one slot toward the end of the tile list.
+# [bind]
+# mods = Super+Shift
+# key = bracketright
+# action = tile_right
+
+# Jump to the first tile slot.
+# [bind]
+# mods = Super+Shift
+# key = Home
+# action = tile_first
+
+# Jump to the last tile slot.
+# [bind]
+# mods = Super+Shift
+# key = End
+# action = tile_last
+
+# Move three slots toward the start of the tile list.
+# [bind]
+# mods = Super+Shift
+# key = M
+# action = tile_move
+# command = -3
+
+# Grid movement keeps row/column semantics in tile layout.
+# Note: tile_up / tile_down stay in the same column; tile_grid_move can move
+# left/right on the same row or up/down in the same column, including multi-step moves.
+
+# Move one row up in the same tile column.
+# [bind]
+# mods = Super+Shift
+# key = Up
+# action = tile_up
+
+# Move one row down in the same tile column.
+# [bind]
+# mods = Super+Shift
+# key = Down
+# action = tile_down
+
+# Move left on the same row.
+# [bind]
+# mods = Super+Shift
+# key = Left
+# action = tile_grid_move
+# command = left
+
+# Move up two rows in the same column.
+# [bind]
+# mods = Super+Shift
+# key = K
+# action = tile_grid_move
+# command = up 2
+
+# Move to the top of the current column.
+# [bind]
+# mods = Super+Shift
+# key = Home
+# action = tile_col_top
+
+# Move to the bottom of the current column.
+# [bind]
+# mods = Super+Shift
+# key = End
+# action = tile_col_bottom
+
+# ----------------------------------------------------------------------------
+# Layout animation
+# ----------------------------------------------------------------------------
+# [layout_anim] controls scene-node easing for tile and scroll movement.
+# If the section is omitted, Morph keeps easing enabled with these defaults:
+# - enabled = yes
+# - speed / lambda = 15
+# - epsilon / snap = 0.35
+# Note: this only smooths scene translation; client configure/resize behavior is unchanged.
+#
+# [layout_anim]
+# enabled = yes
+# speed = 15
+# epsilon = 0.35
+
+# ----------------------------------------------------------------------------
+# Decorations
+# ----------------------------------------------------------------------------
+# [decoration] controls the default xdg-decoration policy for tile and scroll layouts.
+# If omitted, Morph strips client title bars in tile and scroll by default for clients that
+# support xdg-decoration. Stack layout and tile-float windows always keep client-side decorations.
+#
+# [decoration]
+# strip_in_tile_scroll = yes
+
+# [decoration_rule] overrides the default decoration behavior for matching windows.
+# First matching rule wins. Use app_id= and/or title= with POSIX extended regex.
+# If strip= is omitted inside a rule, it defaults to yes.
+# Note: strip = no is useful for apps such as video players that should keep CSD.
+#
+# [decoration_rule]
+# app_id = ^mpv$
+# strip = no
+#
+# [decoration_rule]
+# title = ^Picture-in-Picture$
+# strip = no
+
+# ----------------------------------------------------------------------------
+# Tile rules
+# ----------------------------------------------------------------------------
+# [tile_rule] blocks control how matching XDG toplevels behave in tile layout.
+# First matching rule wins.
+# Use app_id= and/or title= with POSIX extended regex.
+# mode = tile keeps the window in the grid.
+# mode = float keeps the window floating on top in tile layout.
+# order = integer changes the sort order among tiled windows; lower values come earlier.
+#
+# Float a launcher in tile layout.
+# [tile_rule]
+# app_id = ^org\.wezfurlong\.wezterm$
+# mode = float
+#
+# Force Vim-like titles near the front of the tile order.
+# [tile_rule]
+# title = ^vim
+# order = -10
+
+# ----------------------------------------------------------------------------
+# Input mapping
+# ----------------------------------------------------------------------------
+# [input_map] ties touch, tablet, or pointer devices to a specific output connector.
+# First matching rule wins.
+# Required keys:
+# - match= or name=: POSIX extended regex for the device name
+# - output=: connector name such as eDP-1, HDMI-A-1, or DP-2
+# Optional type=: touch, tablet/stylus/pen, pointer/mouse, all, or both
+# If type= is omitted, the rule applies to touch and tablet devices.
+#
+# [input_map]
+# match = ^HUION .*
+# output = DP-2
+# type = tablet
+
+# ----------------------------------------------------------------------------
+# Legacy compatibility
+# ----------------------------------------------------------------------------
+# [pointer] is only kept for backward compatibility.
+# Morph accepts resize_border_px= or resize_border= so older configs do not fail to load,
+# but the compositor now uses a fixed minimal outside edge zone instead.
+#
+# [pointer]
+# resize_border_px = 8

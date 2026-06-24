@@ -103,7 +103,7 @@ struct comp_config {
 	char *hook_startup;
 	char *hook_shutdown;
 	char *hook_reload;
-	/** Tile/scroll scene position easing (see `[layout_anim]` in CONFIG.md). */
+	/** Tile/scroll scene position easing (see `[layout_anim]` in docs/CONFIG.md). */
 	bool layout_anim_enabled;
 	double layout_anim_lambda;
 	double layout_anim_epsilon;

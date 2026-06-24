@@ -107,17 +107,17 @@ uninstall_local_launcher_link() {
 
 install_local_desktop_copy() {
     mkdir -p "$LOCAL_DESKTOP_DIR"
-    install -m 0644 "$COMP_ROOT_DIR/data/morph.desktop" "$LOCAL_DESKTOP_DIR/morph.desktop"
+    install -m 0644 "$COMP_ROOT_DIR/sessions/morph.desktop" "$LOCAL_DESKTOP_DIR/morph.desktop"
     printf 'Installed local desktop file at %s/morph.desktop\n' "$LOCAL_DESKTOP_DIR"
 }
 
 print_sudo_help() {
     printf 'Display-manager-visible dev session install:\n'
     printf '  sudo ln -sf %s %s\n' "$COMP_ROOT_DIR/testing/morph_run" "$SYSTEM_DEV_LAUNCHER_TARGET"
-    printf '  sudo install -m 0644 %s %s\n' "$COMP_ROOT_DIR/data/morph-dev.desktop" "$SYSTEM_DEV_DESKTOP_TARGET"
+    printf '  sudo install -m 0644 %s %s\n' "$COMP_ROOT_DIR/sessions/morph-dev.desktop" "$SYSTEM_DEV_DESKTOP_TARGET"
     printf '\n'
     printf 'Optional production desktop install from the current build layout:\n'
-    printf '  sudo install -m 0644 %s %s\n' "$COMP_ROOT_DIR/data/morph.desktop" "$SYSTEM_DESKTOP_TARGET"
+    printf '  sudo install -m 0644 %s %s\n' "$COMP_ROOT_DIR/sessions/morph.desktop" "$SYSTEM_DESKTOP_TARGET"
 }
 
 ACTION="${1:-}"

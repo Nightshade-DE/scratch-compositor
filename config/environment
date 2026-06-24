@@ -1,5 +1,5 @@
-# morph runtime environment defaults
-# This file is sourced by testing/morph_run.
+# Morph runtime environment defaults
+# This file is sourced by testing/morph_run and morph-session.
 #
 # Keep values commented unless you want to override launcher defaults.
 # Effective defaults live in testing/morph_run.

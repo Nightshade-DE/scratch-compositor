@@ -1,5 +1,5 @@
 #!/bin/sh
-# Shared morph startup/shutdown helpers.
+# Shared Morph startup/shutdown helpers.
 # - Provides unified startup/shutdown logging helpers.
 # - Starts background services with optional shutdown registration.
 # - Detects reachable X11 displays for nested-mode startup decisions.

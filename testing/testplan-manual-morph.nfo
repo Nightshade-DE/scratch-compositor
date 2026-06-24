@@ -219,11 +219,11 @@ Expected:
 -------------------------
 Inspect session entries:
 
-  grep -nE '^(Name|Exec|TryExec)=' data/morph.desktop data/morph-dev.desktop
+  grep -nE '^(Name|Exec|TryExec)=' sessions/morph.desktop sessions/morph-dev.desktop
 
 Expected:
-- `data/morph.desktop` uses `morph-session`
-- `data/morph-dev.desktop` uses `/usr/local/bin/morph-dev-session`
+- `sessions/morph.desktop` uses `morph-session`
+- `sessions/morph-dev.desktop` uses `/usr/local/bin/morph-dev-session`
 
 
 12) Crash/error path

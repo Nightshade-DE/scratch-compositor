@@ -43,6 +43,21 @@ assert_command_fails() {
     fi
 }
 
+launcher_startup_log_path() {
+    state_dir=$1
+    nested_log="$state_dir/morph-nested-startup.log"
+    default_log="$state_dir/morph-startup.log"
+
+    # The launcher probes fallback X11 sockets even when DISPLAY is unset, so
+    # resolve-only tests must accept either native or nested startup logs.
+    if [ -f "$nested_log" ]; then
+        printf '%s\n' "$nested_log"
+        return 0
+    fi
+
+    printf '%s\n' "$default_log"
+}
+
 test_launch_helpers_track_expected_processes() {
     tmpdir=$(make_tmpdir)
     trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
@@ -494,7 +509,7 @@ EOF
         "$repo_root/testing/morph_run"
 
     assert_file_contains \
-        "$tmpdir/state/morph/morph-startup.log" \
+        "$(launcher_startup_log_path "$tmpdir/state/morph")" \
         "Config file path:             $tmpdir/user-config/morph/morph.conf (user config fallback)"
 
     rm -rf "$tmpdir"
@@ -521,7 +536,7 @@ EOF
         "$repo_root/testing/morph_run"
 
     assert_file_contains \
-        "$tmpdir/state/morph/morph-startup.log" \
+        "$(launcher_startup_log_path "$tmpdir/state/morph")" \
         "Config file path:             $tmpdir/system-config/morph.conf (system config fallback)"
 
     rm -rf "$tmpdir"
@@ -564,7 +579,7 @@ test_launcher_can_opt_into_builtin_fallback() {
         "$repo_root/testing/morph_run"
 
     assert_file_contains \
-        "$tmpdir/state/morph/morph-startup.log" \
+        "$(launcher_startup_log_path "$tmpdir/state/morph")" \
         "Builtin fallback enabled:     1"
 
     rm -rf "$tmpdir"
@@ -599,7 +614,7 @@ EOF
         "$repo_root/testing/morph_run"
 
     assert_file_contains \
-        "$tmpdir/state/morph/morph-startup.log" \
+        "$(launcher_startup_log_path "$tmpdir/state/morph")" \
         "MORPH_DBG:                2"
 
     rm -rf "$tmpdir"
@@ -629,10 +644,10 @@ EOF
         sh "$repo_root/scripts/morph-session"
 
     assert_file_contains \
-        "$tmpdir/state/morph/morph-startup.log" \
+        "$(launcher_startup_log_path "$tmpdir/state/morph")" \
         "Managed hook directory:       $repo_root/scripts"
     assert_file_contains \
-        "$tmpdir/state/morph/morph-startup.log" \
+        "$(launcher_startup_log_path "$tmpdir/state/morph")" \
         "Config file path:             $tmpdir/system-config/morph.conf (system config fallback)"
 
     rm -rf "$tmpdir"
@@ -650,7 +665,7 @@ test_meson_install_manifest_lists_runtime_artifacts() {
     assert_file_contains "$manifest" "/usr/local/etc/morph/morph.conf"
     assert_file_contains "$manifest" "/usr/local/etc/morph/system_startup.sh"
     assert_file_contains "$manifest" "/usr/local/share/wayland-sessions/morph.desktop"
-    assert_file_contains "$manifest" "/usr/local/share/doc/morph/CONFIG.md"
+    assert_file_contains "$manifest" "/usr/local/share/doc/morph/docs/CONFIG.md"
 
     rm -rf "$tmpdir"
     trap - EXIT HUP INT TERM

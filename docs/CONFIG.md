@@ -5,13 +5,13 @@ This file documents the **INI-style** configuration read at compositor startup. 
 ## Where the file is loaded from
 
 1. **`morph -c PATH` / `morph --config PATH`** — highest priority when given.
-2. **`$MORPH_CONFIG`** — if set to a readable path.
+2. **[`$MORPH_CONFIG`](ENVIRONMENT.md#morph-config)** — if set to a readable path.
 3. **Default search** (first file that exists and is readable):
    - `$XDG_CONFIG_HOME/morph/morph.conf`
    - `~/.config/morph/morph.conf`
    - `/etc/morph/morph.conf`
 
-If no file is found, startup fails with a log message instead of silently continuing without a config. You can opt into the old synthesized-default behavior with **`--allow-builtin-fallback`** or **`MORPH_ALLOW_BUILTIN_FALLBACK=1`**. If the file exists but defines **no** `[bind]` entries, **built-in binds** are still synthesized as a compatibility fallback.
+If no file is found, startup fails with a log message instead of silently continuing without a config. You can opt into the old synthesized-default behavior with **`--allow-builtin-fallback`** or **[`MORPH_ALLOW_BUILTIN_FALLBACK=1`](ENVIRONMENT.md#morph-allow-builtin-fallback)**. If the file exists but defines **no** `[bind]` entries, **built-in binds** are still synthesized as a compatibility fallback.
 
 A starting point for your own file is **`morph.conf.example`** in this repository.
 
@@ -21,9 +21,9 @@ A starting point for your own file is **`morph.conf.example`** in this repositor
 
 Further launcher details are documented in:
 
-- `testing/LAUNCHER.md`
+- `docs/LAUNCHER.md`
 
-This keeps CONFIG.md focused on INI syntax and behavior.
+This keeps docs/CONFIG.md focused on INI syntax and behavior.
 
 ---
 
@@ -37,7 +37,7 @@ Each `[bind]` block describes **one** shortcut. Start a new `[bind]` section for
 | **`key`** | Yes | Keysym name passed to **xkb_keysym_from_name** (case-insensitive), for example `Return`, `Escape`, `Q`, `Left`, `F1`. |
 | **`action`** | Yes | What to do when the chord matches (see **Actions** below). |
 | **`command`** | For some actions | Shell command line for **`exec`**, or parameter for **`tile_move`** / **`tile_grid_move`** as documented below. |
-| **`when`** | No | If set, **`/bin/sh -c '…'`** is run **on every key press** before the bind is considered; **exit status 0** means the bind is active. Non-zero skips the bind. The shell sees **`MORPH_LAYOUT`** as `stack`, `tile`, or `scroll`, and **`MORPH_WORKSPACE`** as the current workspace number **`1`**..**`9`** (decimal string). |
+| **`when`** | No | If set, **`/bin/sh -c '…'`** is run **on every key press** before the bind is considered; **exit status 0** means the bind is active. Non-zero skips the bind. The shell sees **[`MORPH_LAYOUT`](ENVIRONMENT.md#morph-layout)** as `stack`, `tile`, or `scroll`, and **[`MORPH_WORKSPACE`](ENVIRONMENT.md#morph-workspace)** as the current workspace number **`1`**..**`9`** (decimal string). |
 
 Bindings are matched using modifier and keysym sampled **before** the compositor updates XKB state from the key event, so the chord matches what the user pressed.
 
@@ -138,6 +138,14 @@ output = DP-2
 type = tablet
 ```
 
+## Section `[pointer]` (legacy compatibility)
+
+Morph still accepts a **`[pointer]`** section with **`resize_border_px`** or **`resize_border`** so older configs do not fail to load. These keys are kept for backward compatibility only: the compositor now uses a fixed minimal outside-edge resize zone and ignores the configured value.
+
+| Key | Meaning |
+|-----|---------|
+| **`resize_border_px`** / **`resize_border`** | Accepted and ignored. Keep only if you need to preserve compatibility with older config files. |
+
 ## Actions reference
 
 Unless noted, tiling-related actions are **no-ops** when not in **tile** layout, when there is **no focused** toplevel, when the focused surface is **unmapped**, or when the focused window is a **tile float** (floating within tile mode).
@@ -156,7 +164,7 @@ Unless noted, tiling-related actions are **no-ops** when not in **tile** layout,
 
 ### Workspaces (9 virtual desktops)
 
-There are **nine** workspaces (**`1`**..**`9`** in config and IPC; internally zero-based). New windows open on the **current** workspace. Only windows on the **active** workspace are **visible** and receive pointer hits; tiling and scroll logic apply **per workspace**. In **scroll** layout, the visible column index is stored **per workspace and per physical output** (multi-monitor: each head scrolls independently). **`when=`** predicates can use **`MORPH_WORKSPACE`**.
+There are **nine** workspaces (**`1`**..**`9`** in config and IPC; internally zero-based). New windows open on the **current** workspace. Only windows on the **active** workspace are **visible** and receive pointer hits; tiling and scroll logic apply **per workspace**. In **scroll** layout, the visible column index is stored **per workspace and per physical output** (multi-monitor: each head scrolls independently). **`when=`** predicates can use **[`MORPH_WORKSPACE`](ENVIRONMENT.md#morph-workspace)**.
 
 | `action` | Aliases | `command` | Effect |
 |----------|---------|-----------|--------|
@@ -207,7 +215,7 @@ Rules control how individual XDG toplevels behave in **tile** layout. **First ma
 
 | Key | Meaning |
 |-----|---------|
-| **`app_id`** | POSIX **extended** regex matched against the window’s **app_id** (Wayland). |
+| **`app_id`** / **`app-id`** | POSIX **extended** regex matched against the window’s **app_id** (Wayland). |
 | **`title`** | POSIX **extended** regex matched against the window’s **title**. |
 | **`mode`** | **`tile`** / **`tiled`** (default): normal grid cell. **`float`** / **`floating`**: not placed in the grid; shown centered when mapped and raised on focus in tile mode. |
 | **`order`** | Integer; **lower** values sort **earlier** in the tile list among tiled windows. |
@@ -231,12 +239,12 @@ These are the current compositor entrypoints for local control. The Wayland-faci
 - **`workspace next`** / **`workspace prev`** — cycle workspaces (wraps)
 - **`workspace move N`** — move the focused toplevel to workspace **`N`**
 
-The **`morph`** binary also accepts **`--layout`**, **`--scroll`** (same as **`--layout scroll`**), **`--tile-move`**, **`--scroll-move`**, **`--tile-grid`**, **`--workspace`** **`1`**..**`9`** or **`next`** / **`prev`**, **`--workspace-move`** **`N`** (move focused window to workspace **`N`**), **`--reload-config`** for scripting, and **`--allow-builtin-fallback`** to keep the old no-config fallback behavior; see **`COMPOSITOR.md`** for behavior when no compositor is listening.
+The **`morph`** binary also accepts **`--layout`**, **`--scroll`** (same as **`--layout scroll`**), **`--tile-move`**, **`--scroll-move`**, **`--tile-grid`**, **`--workspace`** **`1`**..**`9`** or **`next`** / **`prev`**, **`--workspace-move`** **`N`** (move focused window to workspace **`N`**), **`--reload-config`** for scripting, and **`--allow-builtin-fallback`** to keep the old no-config fallback behavior; see **`docs/COMPOSITOR.md`** for behavior when no compositor is listening.
 
 ---
 
 ## See also
 
-- **`COMPOSITOR.md`** — compositor scope, architecture notes, build and run.
-- **`PROTOCOLS.md`** — Wayland globals, wlroots vs portal expectations, unsupported protocols.
+- **`docs/COMPOSITOR.md`** — compositor scope, architecture notes, build and run.
+- **`docs/PROTOCOLS.md`** — Wayland globals, wlroots vs portal expectations, unsupported protocols.
 - **`morph.conf.example`** — commented sample file in the repo.
